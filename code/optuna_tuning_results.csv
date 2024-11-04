@@ -1,0 +1,1 @@
+trial_number,learning_rate,batch_size,hidden_size,num_layers,fold_1_loss,fold_2_loss,fold_3_loss,fold_4_loss,fold_5_loss,avg_validation_loss
