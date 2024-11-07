@@ -1,0 +1,2 @@
+trial_number,learning_rate,batch_size,hidden_size,num_layers,fold_1_val_loss,fold_2_val_loss,fold_3_val_loss,fold_4_val_loss,fold_5_val_loss,avg_validation_loss,test_mae_mean,test_mae_std,test_rmse_mean,test_rmse_std
+2,8.234629491061175e-05,64,128,1,69.04390716552734,75.5367660522461,72.53411102294922,113.13679504394531,59.024391174316406,77.85519409179688,9.995000457763672,0.497646865454286,12.19848690032959,0.7189573029965003
