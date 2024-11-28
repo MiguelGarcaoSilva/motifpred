@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 # Model 1: LSTM processing only primary input (X1)
 class LSTMX1Input(nn.Module):
@@ -69,15 +70,14 @@ class LSTMX1_X2BeforeLSTM(nn.Module):
         return self.output_layer(hidden_state[0])
 
 # Model: LSTM with X1 time series and X2 is masking of indices added as extra feature
-# TODO: verificar
 class LSTMX1_X2Masking(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, auxiliary_input_dim):
         super(LSTMX1_X2Masking, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
 
-        # LSTM layer for processing primary input (X1)
-        self.lstm = nn.LSTM(input_size + 1, hidden_size, num_layers, batch_first=True)
+        # LSTM layer for processing primary input (X1 + mask)
+        self.lstm = nn.LSTM(input_size + 1 , hidden_size, num_layers, batch_first=True)
 
         # Fully connected layer that takes concatenated LSTM output and mask input
         self.output_layer = nn.Linear(hidden_size, output_size)
@@ -85,8 +85,8 @@ class LSTMX1_X2Masking(nn.Module):
     def forward(self, primary_input, mask_input):
         
         # X1 is size (batch_size, seq_len, input_size)
-        # mask_input is size (batch_size, seq_len, 1)
-        concatenated_input = torch.cat((primary_input, mask_input), dim=2)
+        # mask_input is size (batch_size, seq_len)
+        concatenated_input = torch.cat((primary_input, mask_input.unsqueeze(-1)), dim=2)
 
         # Forward propagate through LSTM with primary input
         _, (hidden_state, _) = self.lstm(concatenated_input)
@@ -99,7 +99,7 @@ class LSTMX1_X2Masking(nn.Module):
 # Model: LSTM with attention mechanism
 class LSTMX1Attention(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size):
-        super(LSTMX1InputWithAttention, self).__init__()
+        super(LSTMX1Attention, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
 
