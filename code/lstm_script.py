@@ -8,6 +8,8 @@ import optuna
 import random
 
 results_dir = '../results'
+images_dir = '../images'
+data_dir = '../data'
 
 # %%
 import torch
@@ -87,18 +89,19 @@ k = 3 #number of variables
 p = 5 # pattern length
 variable_indexes = range(k)
 
-data_scenario3 = np.genfromtxt("../data/syntheticdata/scenario3_n={}_k={}_p={}_min_step={}_max_step={}.csv".format(n, k, p, 5, 45), delimiter=",").astype(int).reshape((k, n))
+dataset_path = os.path.join(data_dir, "syntheticdata/n={}_k={}_p={}_min_step={}_max_step={}.csv".format(n, k, p, 5, 45))
+motif_indexes_path = os.path.join(data_dir, "syntheticdata/motif_indexes_n={}_k={}_p={}_min_step={}_max_step={}.csv".format(n, k, p, 5, 45))
+data = np.genfromtxt(dataset_path, delimiter=",").astype(int).reshape((k, n))
+motif_indexes = np.genfromtxt(motif_indexes_path, delimiter=",").astype(int)
 
-motif_indexes_scenario3 = np.genfromtxt("../data/syntheticdata/motif_indexes_scenario3_n={}_k={}_p={}_min_step={}_max_step={}.csv".format(n, k, p, 5, 45), delimiter=",").astype(int)
-
-print(motif_indexes_scenario3)
+print(motif_indexes)
 
 
 # %%
 from timeseries_split import BlockingTimeSeriesSplit
 
 #create index  
-indexes = np.arange(len(data_scenario3[0]))
+indexes = np.arange(len(data[0]))
 
 #split data
 tscv = BlockingTimeSeriesSplit(n_splits=5)
@@ -120,7 +123,7 @@ step = 5 #step size for the sliding window
 forecast_period = 50 #forward window size
 
 #x1: past window, x2: indexes of the motif in the window,  y: next relative index of the motif
-X1, X2, y = create_dataset(data_scenario3, variable_indexes, lookback_period, step, forecast_period, motif_indexes_scenario3)
+X1, X2, y = create_dataset(data, variable_indexes, lookback_period, step, forecast_period, motif_indexes)
 
 # X1, X2, and y are now PyTorch tensors
 print("X1 shape:", X1.shape)  # Expected shape: (num_samples, lookback_period, num_features)
@@ -267,7 +270,8 @@ def train_model_dual_input(model, criterion, optimizer, train_loader, val_loader
 
 
 
-def run_cross_val(trial, results_folder, model_class, X1, y, X2=None, criterion=torch.nn.MSELoss(), num_epochs=500):
+def run_cross_val(trial, seed, results_folder, model_class, X1, y, X2=None, criterion=torch.nn.MSELoss(), num_epochs=500):
+    set_seed(seed)
     learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
     hidden_size = trial.suggest_categorical("hidden_size", [16, 32, 64, 128, 256])
     num_layers = trial.suggest_categorical("num_layers", [1, 2, 3])
@@ -286,7 +290,6 @@ def run_cross_val(trial, results_folder, model_class, X1, y, X2=None, criterion=
 
         if X2 is not None:
             X2_train, X2_val, X2_test = X2[train_idx], X2[val_index], X2[test_idx]
-            generator = torch.Generator().manual_seed(seed)
             train_loader = DataLoader(TensorDataset(X1_train_scaled, X2_train, y_train), batch_size=batch_size, shuffle=True)
             val_loader = DataLoader(TensorDataset(X1_val_scaled, X2_val, y_val), batch_size=len(X1_val_scaled), shuffle=False)
             test_loader = DataLoader(TensorDataset(X1_test_scaled, X2_test, y_test), batch_size=len(X1_test_scaled), shuffle=False)
@@ -295,7 +298,6 @@ def run_cross_val(trial, results_folder, model_class, X1, y, X2=None, criterion=
             fold_val_loss, model, train_losses, validation_losses = train_model_dual_input(model, criterion, torch.optim.Adam(model.parameters(), lr=learning_rate), train_loader, val_loader, num_epochs=num_epochs, early_stopper=early_stopper)
 
         else:
-            generator = torch.Generator().manual_seed(seed)
             train_loader = DataLoader(TensorDataset(X1_train_scaled, y_train), batch_size=batch_size, shuffle=True)
             val_loader = DataLoader(TensorDataset(X1_val_scaled, y_val), batch_size=len(X1_val_scaled), shuffle=False)
             test_loader = DataLoader(TensorDataset(X1_test_scaled, y_test), batch_size=len(X1_test_scaled), shuffle=False)
@@ -353,13 +355,13 @@ def run_cross_val(trial, results_folder, model_class, X1, y, X2=None, criterion=
 
 
 
-def run_optuna_study(objective_func, model_class, X1, y, results_folder: str, n_trials: int = 100, num_epochs=500, X2=None):
+def run_optuna_study(objective_func, model_class, seed, X1, y, results_folder: str, n_trials: int = 100, num_epochs=500, X2=None):
     study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=seed))
     file_name = os.path.join(results_folder, "study.pkl")
     
     def objective(trial):
         criterion = torch.nn.MSELoss()  # Define the criterion here
-        trial_val_loss, _, _ = objective_func(trial, results_folder, model_class, X1, y, X2, criterion, num_epochs)  # Pass criterion
+        trial_val_loss, _, _ = objective_func(trial, seed, results_folder, model_class, X1, y, X2, criterion, num_epochs)  # Pass criterion
 
         return trial_val_loss
 
@@ -379,14 +381,14 @@ from models.lstm_pytorch import LSTMX1Input
 
 set_seed(seed)
 
-n_trials = 50
+n_trials = 100
 num_epochs = 500
 
 result_dir = os.path.join(results_dir, f"LSTMX1Input_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)  # Create directory if not exists
 
 # Construct result paths
-run_optuna_study(run_cross_val, LSTMX1Input, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
+run_optuna_study(run_cross_val, LSTMX1Input, seed, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 study_df = study.trials_dataframe()
@@ -425,22 +427,22 @@ plt.tight_layout()
 plt.show()
 
 
-
 # %%
 from models.lstm_pytorch import LSTMX1_X2BeforeLSTM
 
-set_seed(seed)
-
-n_trials = 50
+n_trials = 100
 num_epochs = 500
 
 result_dir = os.path.join(results_dir, f"LSTMX1_X2BeforeLSTM_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)  # Create directory if not exists
 
-run_optuna_study(run_cross_val, LSTMX1_X2BeforeLSTM, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs, X2=X2)
+run_optuna_study(run_cross_val, LSTMX1_X2BeforeLSTM, seed, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs, X2=X2)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 study_df = study.trials_dataframe()
+
+#best configuration
+print("Configuration", study.best_trial.params)
 
 print("Validation Losses", study.best_trial.user_attrs["fold_val_losses"])
 print("Mean validation loss:", study.best_trial.user_attrs["mean_val_loss"])
@@ -473,6 +475,8 @@ for i in range(5):
 
 # Adjust layout and display the plots
 plt.tight_layout()
+model_name = f"LSTMX1_X2BeforeLSTM_{n_trials}_trials_{num_epochs}_epochs"
+plt.savefig(os.path.join(images_dir, f"{model_name}_training_loss.png"))
 plt.show()
 
 # %%
@@ -491,7 +495,6 @@ print("Best hyperparameters:", best_config)
 
 #retrain the model 
 for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X1)):
-    best_model = LSTMX1_X2BeforeLSTM(input_size=X1.shape[2], hidden_size=best_config["hidden_size"], num_layers=best_config["num_layers"], output_size=1, auxiliary_input_dim=X2.shape[1]).to(device)
 
     early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
 
@@ -505,9 +508,9 @@ for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5)
     train_loader = DataLoader(TensorDataset(X1_train_scaled, X2_train, y_train), batch_size=best_config["batch_size"], shuffle=True)
     val_loader = DataLoader(TensorDataset(X1_val_scaled, X2_val, y_val), batch_size=len(X1_val_scaled), shuffle=False)
     test_loader = DataLoader(TensorDataset(X1_test_scaled, X2_test, y_test), batch_size=len(X1_test_scaled), shuffle=False)
-
-    optimizer = torch.optim.Adam(best_model.parameters(), lr=best_config["learning_rate"])
-    fold_val_loss, best_model, train_losses, validation_losses = train_model_dual_input(best_model, criterion, optimizer, train_loader, val_loader, num_epochs=num_epochs, early_stopper=early_stopper)
+    
+    best_model = LSTMX1_X2BeforeLSTM(input_size=X1.shape[2], hidden_size=best_config["hidden_size"], num_layers=best_config["num_layers"], output_size=1, auxiliary_input_dim=X2.shape[1]).to(device)
+    fold_val_loss, best_model, train_losses, validation_losses = train_model_dual_input(best_model, criterion, torch.optim.Adam(best_model.parameters(), lr=best_config["learning_rate"]), train_loader, val_loader, num_epochs=num_epochs, early_stopper=early_stopper)
 
     epochs_train_losses.append(train_losses)
     epochs_val_losses.append(validation_losses)
@@ -547,15 +550,13 @@ plt.show()
 # %%
 from models.lstm_pytorch import LSTMX1_X2AfterLSTM
 
-set_seed(seed)
-
-n_trials = 50
+n_trials = 100
 num_epochs = 500
 
 result_dir = os.path.join(results_dir, f"LSTMX1_X2AfterLSTM_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)  # Create directory if not exists
 
-run_optuna_study(run_cross_val, LSTMX1_X2AfterLSTM, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs, X2=X2)
+run_optuna_study(run_cross_val, LSTMX1_X2AfterLSTM, seed, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs, X2=X2)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 study_df = study.trials_dataframe()
@@ -597,15 +598,13 @@ plt.show()
 # %%
 from models.lstm_pytorch import LSTMX1_X2AfterLSTM
 
-set_seed(seed)
-
-n_trials = 50
+n_trials = 100
 num_epochs = 500
 
 result_dir = os.path.join(results_dir, f"LSTMX1_X2AfterLSTM_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)  # Create directory if not exists
 
-run_optuna_study(run_cross_val, LSTMX1_X2AfterLSTM, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs, X2=X2)
+run_optuna_study(run_cross_val, LSTMX1_X2AfterLSTM, seed, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs, X2=X2)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 study_df = study.trials_dataframe()
@@ -641,14 +640,15 @@ for i in range(5):
 
 # Adjust layout and display the plots
 plt.tight_layout()
+model_name = f"LSTMX1_X2AfterLSTM_{n_trials}_trials_{num_epochs}_epochs"
+plt.savefig(os.path.join(images_dir, f"{model_name}_training_loss.png"))
 plt.show()
 
 
 # %%
 from models.lstm_pytorch import LSTMX1_X2Masking
-set_seed(seed)
 
-n_trials = 50
+n_trials = 100
 num_epochs = 500
 
 #X1 shape is (num_samples, lookback_period)
@@ -663,7 +663,7 @@ masking_X1 = torch.tensor(masking_X1, dtype=torch.float32)
 result_dir = os.path.join(results_dir, f"LSTMX1_X2Masking_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)  # Create directory if not exists
 
-run_optuna_study(run_cross_val, LSTMX1_X2Masking, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs, X2=masking_X1)
+run_optuna_study(run_cross_val, LSTMX1_X2Masking, seed, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs, X2=masking_X1)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 study_df = study.trials_dataframe()
@@ -700,6 +700,8 @@ for i in range(5):
 
 # Adjust layout and display the plots
 plt.tight_layout()
+model_name = f"LSTMX1_X2Masking_{n_trials}_trials_{num_epochs}_epochs"
+plt.savefig(os.path.join(images_dir, f"{model_name}_training_loss.png"))
 plt.show()
 
 
@@ -707,15 +709,13 @@ plt.show()
 # %%
 from models.lstm_pytorch import LSTMX1Attention
 
-set_seed(seed)
-
-n_trials = 50
+n_trials = 100
 num_epochs = 500
 
 result_dir = os.path.join(results_dir, f"LSTMX1Attention_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)  # Create directory if not exists
 
-run_optuna_study(run_cross_val, LSTMX1Attention, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
+run_optuna_study(run_cross_val, LSTMX1Attention, seed, X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 study_df = study.trials_dataframe()
@@ -751,7 +751,8 @@ for i in range(5):
 
 # Adjust layout and display the plots
 plt.tight_layout()
+model_name = f"LSTMX1Attention_{n_trials}_trials_{num_epochs}_epochs"
+plt.savefig(os.path.join(images_dir, f"{model_name}_training_loss.png"))
 plt.show()
-
 
 
