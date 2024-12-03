@@ -3,9 +3,8 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset
 from sklearn.preprocessing import MinMaxScaler
 from timeseries_split import BlockingTimeSeriesSplit
 import numpy as np
-import optuna
-import joblib
 import os
+import random
 from typing import Tuple, List
 
 
@@ -26,11 +25,16 @@ class EarlyStopper:
             if self.counter >= self.patience:
                 return True
         return False
+    
+    def reset(self):
+        self.counter = 0
+        self.min_validation_loss = float('inf')
 
 
 class ModelTrainingPipeline:
-    def __init__(self, device: torch.device):
+    def __init__(self, device: torch.device, early_stopper=None):
         self.device = device
+        self.early_stopper = early_stopper
 
     @staticmethod
     def evaluate_metrics(predictions: torch.Tensor, targets: torch.Tensor) -> Tuple[float, float]:
@@ -46,7 +50,35 @@ class ModelTrainingPipeline:
         X_test = torch.tensor(scaler.transform(X_test.view(-1, X_test.shape[-1])), dtype=torch.float32).view(X_test.shape)
         return X_train, X_val, X_test
 
-    def train_model(self, model, criterion, optimizer, train_loader, val_loader, num_epochs=1000, early_stopper=None, dual_input=False):
+    @staticmethod
+    def set_seed(seed):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+
+
+    def suggest_hyperparameters(self, trial):
+        return {
+            "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True),
+            "hidden_size": trial.suggest_categorical("hidden_size", [16, 32, 64, 128, 256]),
+            "num_layers": trial.suggest_categorical("num_layers", [1, 2, 3]),
+            "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64, 128]),
+        }
+
+    def prepare_dataloaders(self, X1_train, X1_val, X1_test, y_train, y_val, y_test, batch_size, X2_train=None, X2_val=None, X2_test=None):
+        if X2_train is not None:
+            train_loader = DataLoader(TensorDataset(X1_train, X2_train, y_train), batch_size=batch_size, shuffle=True)
+            val_loader = DataLoader(TensorDataset(X1_val, X2_val, y_val), batch_size=len(X1_val), shuffle=False)
+            test_loader = DataLoader(TensorDataset(X1_test, X2_test, y_test), batch_size=len(X1_test), shuffle=False)
+        else:
+            train_loader = DataLoader(TensorDataset(X1_train, y_train), batch_size=batch_size, shuffle=True)
+            val_loader = DataLoader(TensorDataset(X1_val, y_val), batch_size=len(X1_val), shuffle=False)
+            test_loader = DataLoader(TensorDataset(X1_test, y_test), batch_size=len(X1_test), shuffle=False)
+
+        return train_loader, val_loader, test_loader
+
+
+    def train_model(self, model, criterion, optimizer, train_loader, val_loader, num_epochs=1000, dual_input=False):
         best_val_loss = float('inf')
         best_model_state = None
         train_losses = []
@@ -90,7 +122,7 @@ class ModelTrainingPipeline:
             validation_losses.append(avg_val_loss)
 
             # Early stopping
-            if early_stopper and epoch >= early_stopper.min_epochs and early_stopper.early_stop(avg_val_loss):
+            if self.early_stopper and epoch >= self.early_stopper.min_epochs and self.early_stopper.early_stop(avg_val_loss):
                 print(f"Early stopping at epoch {epoch + 1}")
                 break
 
@@ -102,45 +134,97 @@ class ModelTrainingPipeline:
         model.load_state_dict(best_model_state)
         return best_val_loss, model, train_losses, validation_losses
 
-    def run_cross_val(self, trial, seed, results_folder, model_class, X1, y, X2=None, criterion=torch.nn.MSELoss(), num_epochs=500):
-        learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
-        hidden_size = trial.suggest_categorical("hidden_size", [16, 32, 64, 128, 256])
-        num_layers = trial.suggest_categorical("num_layers", [1, 2, 3])
-        batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
+    def evaluate_test_set(self, model, test_loader, criterion, dual_input=False):
+        model.eval()
+        all_predictions, all_true_values = [], []
+        test_loss = 0
 
-        fold_results, test_mae_per_fold, test_rmse_per_fold, test_losses = [], [], [], []
+        with torch.no_grad():
+            for batch_data in test_loader:
+                if dual_input:
+                    batch_X1, batch_X2, batch_y = batch_data[0].to(self.device), batch_data[1].to(self.device), batch_data[2].to(self.device)
+                    predictions = model(batch_X1, batch_X2)
+                else:
+                    batch_X1, batch_y = batch_data[0].to(self.device), batch_data[1].to(self.device)
+                    predictions = model(batch_X1)
+
+                test_loss += criterion(predictions, batch_y).item()
+                all_predictions.append(predictions)
+                all_true_values.append(batch_y)
+
+        avg_test_loss = test_loss / len(test_loader)
+        all_predictions = torch.cat(all_predictions)
+        all_true_values = torch.cat(all_true_values)
+
+        return avg_test_loss, all_predictions, all_true_values
+
+
+
+    def run_cross_val(self, trial, seed, results_folder, model_class, X1, y, X2=None, criterion=torch.nn.MSELoss(), num_epochs=500):
+        self.set_seed(seed)
+        hyperparams = self.suggest_hyperparameters(trial)
+        fold_results, test_losses, test_mae_per_fold, test_rmse_per_fold = [], [], [], []
 
         for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X1)):
-            early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
-
+            self.early_stopper.reset()
+            
             # Data split
             train_val_split_idx = int(0.8 * len(train_idx))
             train_idx, val_index = train_idx[:train_val_split_idx], train_idx[train_val_split_idx:]
-
             X1_train, X1_val, X1_test = X1[train_idx], X1[val_index], X1[test_idx]
             y_train, y_val, y_test = y[train_idx], y[val_index], y[test_idx]
             X1_train_scaled, X1_val_scaled, X1_test_scaled = self.scale_data(X1_train, X1_val, X1_test)
-
+            
             if X2 is not None:
-                # Dual input
                 X2_train, X2_val, X2_test = X2[train_idx], X2[val_index], X2[test_idx]
-                train_loader = DataLoader(TensorDataset(X1_train_scaled, X2_train, y_train), batch_size=batch_size, shuffle=True)
-                val_loader = DataLoader(TensorDataset(X1_val_scaled, X2_val, y_val), batch_size=len(X1_val_scaled), shuffle=False)
-                test_loader = DataLoader(TensorDataset(X1_test_scaled, X2_test, y_test), batch_size=len(X1_test_scaled), shuffle=False)
-
-                model = model_class(input_size=X1.shape[2], hidden_size=hidden_size, num_layers=num_layers, output_size=1, auxiliary_input_dim=X2.shape[1]).to(self.device)
-                fold_val_loss, model, train_losses, validation_losses = self.train_model(model, criterion, torch.optim.Adam(model.parameters(), lr=learning_rate), train_loader, val_loader, num_epochs, early_stopper, dual_input=True)
             else:
-                # Single input
-                train_loader = DataLoader(TensorDataset(X1_train_scaled, y_train), batch_size=batch_size, shuffle=True)
-                val_loader = DataLoader(TensorDataset(X1_val_scaled, y_val), batch_size=len(X1_val_scaled), shuffle=False)
-                test_loader = DataLoader(TensorDataset(X1_test_scaled, y_test), batch_size=len(X1_test_scaled), shuffle=False)
+                X2_train = X2_val = X2_test = None
 
-                model = model_class(input_size=X1.shape[2], hidden_size=hidden_size, num_layers=num_layers, output_size=1).to(self.device)
-                fold_val_loss, model, train_losses, validation_losses = self.train_model(model, criterion, torch.optim.Adam(model.parameters(), lr=learning_rate), train_loader, val_loader, num_epochs, early_stopper)
+            # Prepare DataLoaders
+            train_loader, val_loader, test_loader = self.prepare_dataloaders(
+                X1_train_scaled, X1_val_scaled, X1_test_scaled, y_train, y_val, y_test, 
+                hyperparams['batch_size'], X2_train, X2_val, X2_test
+            )
+
+            # Initialize Model
+            if X2:
+                model = model_class(input_size=X1.shape[2], hidden_size=hyperparams["hidden_size"], num_layers=hyperparams["num_layers"], output_size=1, auxiliary_input_dim=X2.shape[1]).to(self.device)
+            else:
+                model = model_class(input_size=X1.shape[2], hidden_size=hyperparams["hidden_size"], num_layers=hyperparams["num_layers"], output_size=1).to(self.device)
+
+            # Train Model
+            fold_val_loss, model, train_losses, validation_losses = self.train_model(
+                model, criterion, torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate']),
+                train_loader, val_loader, num_epochs, dual_input=(X2 is not None)
+            )
 
             fold_results.append(fold_val_loss)
             trial.set_user_attr(f"fold_{fold + 1}_train_losses", train_losses)
             trial.set_user_attr(f"fold_{fold + 1}_validation_losses", validation_losses)
 
-        return np.mean(fold_results), model
+            # Test evaluation
+            avg_test_loss, fold_predictions, fold_true_values = self.evaluate_test_set(
+                model, test_loader, criterion, dual_input=(X2 is not None)
+            )
+            test_losses.append(avg_test_loss)
+
+            mae, rmse = self.evaluate_metrics(fold_predictions, fold_true_values)
+            test_mae_per_fold.append(mae)
+            test_rmse_per_fold.append(rmse)
+
+        mean_val_loss = np.mean(fold_results)
+        mean_test_loss = np.mean(test_losses)
+        mean_test_mae, std_test_mae = np.mean(test_mae_per_fold), np.std(test_mae_per_fold)
+        mean_test_rmse, std_test_rmse = np.mean(test_rmse_per_fold), np.std(test_rmse_per_fold)
+
+        # Log metrics to Optuna
+        trial.set_user_attr("fold_val_losses", fold_results)
+        trial.set_user_attr("mean_val_loss", mean_val_loss)
+        trial.set_user_attr("test_losses", test_losses)
+        trial.set_user_attr("mean_test_loss", mean_test_loss)
+        trial.set_user_attr("mean_test_mae", mean_test_mae)
+        trial.set_user_attr("std_test_mae", std_test_mae)
+        trial.set_user_attr("mean_test_rmse", mean_test_rmse)
+        trial.set_user_attr("std_test_rmse", std_test_rmse)
+
+        return mean_val_loss, mean_test_loss, model
