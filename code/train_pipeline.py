@@ -81,6 +81,7 @@ class ModelTrainingPipeline:
     def train_model(self, model, criterion, optimizer, train_loader, val_loader, num_epochs=1000, dual_input=False):
         best_val_loss = float('inf')
         best_model_state = None
+        best_epoch = num_epochs
         train_losses = []
         validation_losses = []
 
@@ -123,16 +124,18 @@ class ModelTrainingPipeline:
 
             # Early stopping
             if self.early_stopper and epoch >= self.early_stopper.min_epochs and self.early_stopper.early_stop(avg_val_loss):
-                print(f"Early stopping at epoch {epoch + 1}")
+                print(f"Early stopping at epoch {epoch + 1}, with best epoch being {best_epoch}")
                 break
 
             # Save the best model
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 best_model_state = model.state_dict()
+                best_epoch = epoch
 
-        model.load_state_dict(best_model_state)
-        return best_val_loss, model, train_losses, validation_losses
+        if best_model_state:
+            model.load_state_dict(best_model_state)
+        return best_val_loss, model, best_epoch, train_losses, validation_losses
 
     def evaluate_test_set(self, model, test_loader, criterion, dual_input=False):
         model.eval()
@@ -163,7 +166,7 @@ class ModelTrainingPipeline:
     def run_cross_val(self, trial, seed, results_folder, model_class, X1, y, X2=None, criterion=torch.nn.MSELoss(), num_epochs=500):
         self.set_seed(seed)
         hyperparams = self.suggest_hyperparameters(trial)
-        fold_results, test_losses, test_mae_per_fold, test_rmse_per_fold = [], [], [], []
+        fold_results, best_epochs, test_losses, test_mae_per_fold, test_rmse_per_fold = [], [], [], [], []
 
         for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X1)):
             self.early_stopper.reset()
@@ -193,7 +196,7 @@ class ModelTrainingPipeline:
                 model = model_class(input_size=X1.shape[2], hidden_size=hyperparams["hidden_size"], num_layers=hyperparams["num_layers"], output_size=1).to(self.device)
 
             # Train Model
-            fold_val_loss, model, train_losses, validation_losses = self.train_model(
+            fold_val_loss, model, best_epoch, train_losses, validation_losses = self.train_model(
                 model, criterion, torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate']),
                 train_loader, val_loader, num_epochs, dual_input=(X2 is not None)
             )
