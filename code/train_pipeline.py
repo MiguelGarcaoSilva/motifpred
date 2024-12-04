@@ -57,14 +57,6 @@ class ModelTrainingPipeline:
         random.seed(seed)
 
 
-    def suggest_hyperparameters(self, trial):
-        return {
-            "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True),
-            "hidden_size": trial.suggest_categorical("hidden_size", [16, 32, 64, 128, 256]),
-            "num_layers": trial.suggest_categorical("num_layers", [1, 2, 3]),
-            "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64, 128]),
-        }
-
     def prepare_dataloaders(self, X1_train, X1_val, X1_test, y_train, y_val, y_test, batch_size, X2_train=None, X2_val=None, X2_test=None):
         if X2_train is not None:
             train_loader = DataLoader(TensorDataset(X1_train, X2_train, y_train), batch_size=batch_size, shuffle=True)
@@ -133,6 +125,9 @@ class ModelTrainingPipeline:
                 best_model_state = model.state_dict()
                 best_epoch = epoch
 
+            if epoch == num_epochs - 1:
+                print(f"Training completed all epochs. Best epoch was {best_epoch}")
+
         if best_model_state:
             model.load_state_dict(best_model_state)
         return best_val_loss, model, best_epoch, train_losses, validation_losses
@@ -163,21 +158,21 @@ class ModelTrainingPipeline:
 
 
 
-    def run_cross_val(self, trial, seed, results_folder, model_class, X1, y, X2=None, criterion=torch.nn.MSELoss(), num_epochs=500):
+    def run_cross_val(self, trial, seed, results_folder, model_class, model_type, X1, y, X2=None, 
+                    criterion=torch.nn.MSELoss(), num_epochs=500, hyperparams=None, model_params_keys=None):
         self.set_seed(seed)
-        hyperparams = self.suggest_hyperparameters(trial)
         fold_results, best_epochs, test_losses, test_mae_per_fold, test_rmse_per_fold = [], [], [], [], []
 
         for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X1)):
             self.early_stopper.reset()
-            
-            # Data split
+
+            # Split and scale data
             train_val_split_idx = int(0.8 * len(train_idx))
             train_idx, val_index = train_idx[:train_val_split_idx], train_idx[train_val_split_idx:]
             X1_train, X1_val, X1_test = X1[train_idx], X1[val_index], X1[test_idx]
             y_train, y_val, y_test = y[train_idx], y[val_index], y[test_idx]
             X1_train_scaled, X1_val_scaled, X1_test_scaled = self.scale_data(X1_train, X1_val, X1_test)
-            
+
             if X2 is not None:
                 X2_train, X2_val, X2_test = X2[train_idx], X2[val_index], X2[test_idx]
             else:
@@ -189,11 +184,20 @@ class ModelTrainingPipeline:
                 hyperparams['batch_size'], X2_train, X2_val, X2_test
             )
 
-            # Initialize Model
-            if X2:
-                model = model_class(input_size=X1.shape[2], hidden_size=hyperparams["hidden_size"], num_layers=hyperparams["num_layers"], output_size=1, auxiliary_input_dim=X2.shape[1]).to(self.device)
-            else:
-                model = model_class(input_size=X1.shape[2], hidden_size=hyperparams["hidden_size"], num_layers=hyperparams["num_layers"], output_size=1).to(self.device)
+            model_hyperparams = {k: v for k, v in hyperparams.items() if k in model_params_keys}
+
+            
+            if model_type == 'LSTM':
+                if X2 is not None:
+                    model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(self.device)
+                else:
+                    model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(self.device)
+            elif model_type == 'FFNN':
+                input_dim = X1.shape[2] * X1.shape[1] # Flatten the time series
+                if X2 is not None:
+                    model = model_class(input_dim=input_dim + X2.shape[1], **model_hyperparams, output_dim=1).to(self.device)
+                else:
+                    model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(self.device)
 
             # Train Model
             fold_val_loss, model, best_epoch, train_losses, validation_losses = self.train_model(
@@ -204,6 +208,7 @@ class ModelTrainingPipeline:
             fold_results.append(fold_val_loss)
             trial.set_user_attr(f"fold_{fold + 1}_train_losses", train_losses)
             trial.set_user_attr(f"fold_{fold + 1}_validation_losses", validation_losses)
+            best_epochs.append(best_epoch)
 
             # Test evaluation
             avg_test_loss, fold_predictions, fold_true_values = self.evaluate_test_set(
@@ -231,3 +236,4 @@ class ModelTrainingPipeline:
         trial.set_user_attr("std_test_rmse", std_test_rmse)
 
         return mean_val_loss, mean_test_loss, model
+

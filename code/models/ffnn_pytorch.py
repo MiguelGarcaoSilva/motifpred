@@ -3,21 +3,66 @@ from torch import nn
 import torch.nn.functional as F
 
 
-class FFNN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(FFNN, self).__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
+class FFNNX1(nn.Module):
+    def __init__(self, input_dim, hidden_sizes, output_dim):
+        super(FFNNX1, self).__init__()
+
+        self.hidden_sizes = hidden_sizes
+        self.input_layer = nn.Linear(input_dim, hidden_sizes[0])
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]) for i in range(len(hidden_sizes) - 1)])
+        self.output_layer = nn.Linear(hidden_sizes[-1], output_dim)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+        x = x.view(x.size(0), -1)  # Reshape to (batch_size, windown_len * features)
 
-    def predict(self, x):
-        with torch.no_grad():
-            x = F.relu(self.fc1(x))
-            x = self.fc2(x)
-            return x
+        x = F.relu(self.input_layer(x))
+        for hidden_layer in self.hidden_layers:
+            x = F.relu(hidden_layer(x))
+        return self.output_layer(x)
+
+
+class FFNNX1_X2Masking(nn.Module):
+    def __init__(self, input_dim, hidden_sizes, output_dim):
+        super(FFNNX1_Masking, self).__init__()
+
+        self.hidden_sizes = hidden_sizes
+        self.input_layer = nn.Linear(input_dim, hidden_sizes[0])
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]) for i in range(len(hidden_sizes) - 1)])
+        self.output_layer = nn.Linear(hidden_sizes[-1], output_dim)
+
+    def forward(self, x, mask):
+        # X1 is size (batch_size, windown_len, features)
+        # mask_input is size (batch_size, windown_len)
+        x = x.view(x.size(0), -1)  # Reshape to (batch_size, windown_len * features)
+
+        #concat mask to input
+        x = torch.cat((x, mask), dim = 1)
+
+        x = F.relu(self.input_layer(x))
+        for hidden_layer in self.hidden_layers:
+            x = F.relu(hidden_layer(x))
+        return self.output_layer(x)
+
+class FFNNX1_X2Indices(nn.Module):
+    def __init__(self, input_dim, hidden_sizes, output_dim):
+        super(FFNNX1_X2Indices, self).__init__()
+
+        self.hidden_sizes = hidden_sizes
+        self.input_layer = nn.Linear(input_dim, hidden_sizes[0])
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]) for i in range(len(hidden_sizes) - 1)])
+        self.output_layer = nn.Linear(hidden_sizes[-1], output_dim)
+
+    def forward(self, x, indices):
+        # X1 is size (batch_size, windown_len, features)
+        # indices is size (batch_size, max_indices_in_window)
+        x = x.view(x.size(0), -1)  # Reshape to (batch_size, windown_len * features)
+
+        #concat indices to input
+        x = torch.cat((x, indices), dim = 1)
+
+        x = F.relu(self.input_layer(x))
+        for hidden_layer in self.hidden_layers:
+            x = F.relu(hidden_layer(x))
+        return self.output_layer(x)
 
                 
