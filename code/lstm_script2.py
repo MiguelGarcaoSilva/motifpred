@@ -150,7 +150,7 @@ def run_optuna_study(objective_func, model_class, model_type, seed, X1, y, resul
             for param_name, param_details in suggestion_dict.items()
         }
         
-        if "num_layers" in hyperparameters:
+        if model_type == "FFNN" and "num_layers" in hyperparameters :
             num_layers = hyperparameters["num_layers"]
             hidden_sizes = [
                 trial.suggest_categorical(f"hidden_size_layer_{i}", [16, 32, 64, 128, 256] )

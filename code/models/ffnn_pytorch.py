@@ -23,7 +23,7 @@ class FFNNX1(nn.Module):
 
 class FFNNX1_X2Masking(nn.Module):
     def __init__(self, input_dim, hidden_sizes, output_dim):
-        super(FFNNX1_Masking, self).__init__()
+        super(FFNNX1_X2Masking, self).__init__()
 
         self.hidden_sizes = hidden_sizes
         self.input_layer = nn.Linear(input_dim, hidden_sizes[0])

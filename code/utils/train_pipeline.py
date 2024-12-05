@@ -1,11 +1,150 @@
 import torch
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 from sklearn.preprocessing import MinMaxScaler
-from timeseries_split import BlockingTimeSeriesSplit
+from utils.timeseries_split import BlockingTimeSeriesSplit
 import numpy as np
 import os
 import random
+import joblib
+import optuna
 from typing import Tuple, List
+
+
+def extract_hyperparameters(trial, suggestion_dict):
+    hyperparameters = {
+        param_name: getattr(trial, f"suggest_{param_details['type']}")
+        (
+            param_name,
+            *param_details['args'],  # Pass positional arguments
+            **param_details.get('kwargs', {})  # Pass optional keyword arguments
+        )
+        for param_name, param_details in suggestion_dict.items()
+    }
+
+    return hyperparameters
+
+
+
+def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, model_params_keys, seed, X1, X2, y, results_folder: str, n_trials: int = 100, num_epochs=500):
+
+    study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=seed))
+    file_name = os.path.join(results_folder, "study.pkl")
+    
+    def objective(trial):
+        # Extract basic hyperparameters from the suggestion dictionary
+        hyperparameters = extract_hyperparameters(trial, suggestion_dict)
+
+        if model_type == "FFNN" and "num_layers" in hyperparameters :
+            num_layers = hyperparameters["num_layers"]
+            hidden_sizes = [
+                trial.suggest_categorical(f"hidden_size_layer_{i}", [16, 32, 64, 128, 256] )
+                for i in range(num_layers)
+            ]
+            hyperparameters["hidden_sizes"] = hidden_sizes
+            
+        criterion = torch.nn.MSELoss()  # Define the criterion here
+        trial_val_loss, _, _ = objective_func(trial, seed, results_folder, model_class, model_type, X1, y, X2, criterion, num_epochs, hyperparameters, model_params_keys)  # Pass hyperparameters
+
+        return trial_val_loss
+
+    # Let Optuna manage trials and pass them to the objective function
+    study.optimize(objective, n_trials=n_trials)
+    joblib.dump(study, file_name)
+
+    # Save and log the study results
+    study_df = study.trials_dataframe()
+    study_df.to_csv(os.path.join(results_folder, "study_results.csv"), index=False)
+
+    print("Best hyperparameters:", study.best_params)
+
+def get_preds_best_config(study, pipeline, model_class, model_type, model_params_keys, num_epochs, seed, X1, X2=None, y=None):
+    pipeline.set_seed(seed)
+
+    # Retrieve the best configuration from the Optuna study
+    best_config = study.best_params
+    print("Best hyperparameters:", best_config)
+
+    # Initialize lists to store results
+    epochs_train_losses = []
+    epochs_val_losses = []
+    val_losses = []
+    test_losses = []
+    all_predictions = []
+    all_true_values = []
+
+    # Perform cross-validation
+    for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X1)):
+        pipeline.early_stopper.reset() 
+
+        # Split and scale data
+        train_val_split_idx = int(0.8 * len(train_idx))
+        train_idx, val_index = train_idx[:train_val_split_idx], train_idx[train_val_split_idx:]
+        X1_train, X1_val, X1_test = X1[train_idx], X1[val_index], X1[test_idx]
+        y_train, y_val, y_test = y[train_idx], y[val_index], y[test_idx]
+        X1_train_scaled, X1_val_scaled, X1_test_scaled = pipeline.scale_data(X1_train, X1_val, X1_test)
+
+        if X2 is not None:
+            X2_train, X2_val, X2_test = X2[train_idx], X2[val_index], X2[test_idx]
+        else:
+            X2_train = X2_val = X2_test = None
+
+        # Prepare DataLoaders
+        train_loader, val_loader, test_loader = pipeline.prepare_dataloaders(
+            X1_train_scaled, X1_val_scaled, X1_test_scaled, y_train, y_val, y_test, 
+            best_config['batch_size'], X2_train, X2_val, X2_test
+        )
+        model_hyperparams = {k: v for k, v in best_config.items() if k in model_params_keys}
+
+
+        if model_type == 'LSTM':
+            if X2 is not None:
+                model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(pipeline.device)
+            else:
+                model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(pipeline.device)
+        elif model_type == 'FFNN':
+
+            # to solve hidden sizes being seperate hyperparameters
+            model_hyperparams["hidden_sizes"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
+       
+            input_dim = X1.shape[2] * X1.shape[1] # Flatten the time series
+            if X2 is not None:
+                model = model_class(input_dim=input_dim + X2.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
+            else:
+                model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(pipeline.device)
+
+
+
+        # Train the model
+        fold_val_loss, model, best_epochs, train_losses, validation_losses = pipeline.train_model(
+            model,
+            criterion=torch.nn.MSELoss(),
+            optimizer=torch.optim.Adam(model.parameters(), lr=best_config["learning_rate"]),
+            train_loader=train_loader,
+            val_loader=val_loader,
+            num_epochs=num_epochs,
+            dual_input= X2 is not None 
+        )
+
+        # Store training and validation losses
+        epochs_train_losses.append(train_losses)
+        epochs_val_losses.append(validation_losses)
+        val_losses.append(fold_val_loss)
+
+        # Evaluate the model on the test set
+        test_loss, fold_predictions, fold_true_values = pipeline.evaluate_test_set(
+            model, test_loader, criterion=torch.nn.MSELoss(), dual_input=X2 is not None
+        )
+        test_losses.append(test_loss)
+        all_predictions.append(fold_predictions.cpu().numpy())
+        all_true_values.append(fold_true_values.cpu().numpy())
+
+    # Output validation and test losses
+    print("Validation Losses:", val_losses)
+    print("Mean validation loss:", np.mean(val_losses))
+    print("Test Losses:", test_losses)
+    print("Mean test loss:", np.mean(test_losses))
+
+    return epochs_train_losses, epochs_val_losses, all_predictions, all_true_values
 
 
 class EarlyStopper:
