@@ -1,5 +1,8 @@
 import torch
 from torch.utils.data import Dataset, DataLoader, TensorDataset
+from darts.models import TCNModel
+from darts import TimeSeries
+from darts.metrics import mse
 from sklearn.preprocessing import MinMaxScaler
 from utils.timeseries_split import BlockingTimeSeriesSplit
 import numpy as np
@@ -41,6 +44,15 @@ def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, m
                 for i in range(num_layers)
             ]
             hyperparameters["hidden_sizes"] = hidden_sizes
+
+        elif model_type == "TCN" and "num_blocks" in hyperparameters:
+            num_blocks = hyperparameters["num_blocks"]
+            block_channels = [
+                trial.suggest_categorical(f"block_channels_{i}", [16, 32, 64, 128, 256] )
+                for i in range(num_blocks)
+            
+            ]
+            hyperparameters["num_channels"] = block_channels
             
         criterion = torch.nn.MSELoss()  # Define the criterion here
         trial_val_loss, _, _ = objective_func(trial, seed, results_folder, model_class, model_type, X1, y, X2, criterion, num_epochs, hyperparameters, model_params_keys)  # Pass hyperparameters
@@ -102,7 +114,6 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
             else:
                 model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'FFNN':
-
             # to solve hidden sizes being seperate hyperparameters
             model_hyperparams["hidden_sizes"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
        
@@ -111,8 +122,11 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
                 model = model_class(input_dim=input_dim + X2.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
             else:
                 model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(pipeline.device)
-
-
+        elif model_type == 'CNN':
+            if X2 is not None:
+                model = model_class(input_channels=X1.shape[2] + X2.shape[1], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
+            else:
+                model = model_class(input_channels=X1.shape[2], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
 
         # Train the model
         fold_val_loss, model, best_epochs, train_losses, validation_losses = pipeline.train_model(
@@ -213,8 +227,7 @@ class ModelTrainingPipeline:
         best_val_loss = float('inf')
         best_model_state = None
         best_epoch = num_epochs
-        train_losses = []
-        validation_losses = []
+        train_losses, validation_losses = [], []
 
         for epoch in range(num_epochs):
             model.train()
@@ -271,6 +284,7 @@ class ModelTrainingPipeline:
             model.load_state_dict(best_model_state)
         return best_val_loss, model, best_epoch, train_losses, validation_losses
 
+
     def evaluate_test_set(self, model, test_loader, criterion, dual_input=False):
         model.eval()
         all_predictions, all_true_values = [], []
@@ -295,6 +309,7 @@ class ModelTrainingPipeline:
 
         return avg_test_loss, all_predictions, all_true_values
 
+ 
 
 
     def run_cross_val(self, trial, seed, results_folder, model_class, model_type, X1, y, X2=None, 
@@ -322,10 +337,8 @@ class ModelTrainingPipeline:
                 X1_train_scaled, X1_val_scaled, X1_test_scaled, y_train, y_val, y_test, 
                 hyperparams['batch_size'], X2_train, X2_val, X2_test
             )
-
+   
             model_hyperparams = {k: v for k, v in hyperparams.items() if k in model_params_keys}
-
-            
             if model_type == 'LSTM':
                 if X2 is not None:
                     model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(self.device)
@@ -334,31 +347,42 @@ class ModelTrainingPipeline:
             elif model_type == 'FFNN':
                 input_dim = X1.shape[2] * X1.shape[1] # Flatten the time series
                 if X2 is not None:
+                    #TODO: Warning: this only works for CNNX1_X2Masking, if impelementing other CNN models, this should be changed
                     model = model_class(input_dim=input_dim + X2.shape[1], **model_hyperparams, output_dim=1).to(self.device)
                 else:
                     model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(self.device)
+            elif model_type == 'CNN':
+                if X2 is not None:
+                    #TODO: Warning: this only works for CNNX1_X2Masking, if impelementing other CNN models, this should be changed
+                    model = model_class(input_channels=X1.shape[2] + 1, sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(self.device)
+                else:
+                    model = model_class(input_channels=X1.shape[2], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(self.device)
+            elif model_type == 'TCN':
+                model = model_class(input_channels=X1.shape[2], **model_hyperparams, output_dim=1, output_activation=None, causal=True).to(self.device)
 
-            # Train Model
+
+            # Train the model using the existing train_model method
             fold_val_loss, model, best_epoch, train_losses, validation_losses = self.train_model(
                 model, criterion, torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate']),
                 train_loader, val_loader, num_epochs, dual_input=(X2 is not None)
             )
 
+            # Test evaluation for other models
+            fold_test_loss, test_fold_predictions, test_fold_true_values = self.evaluate_test_set(
+                model, test_loader, criterion, dual_input=(X2 is not None)
+            )
+            test_losses.append(fold_test_loss)
+            mae, rmse = self.evaluate_metrics(test_fold_predictions, test_fold_true_values)
+            test_mae_per_fold.append(mae)
+            test_rmse_per_fold.append(rmse)
+
+            # Store results for Optuna logging
             fold_results.append(fold_val_loss)
             trial.set_user_attr(f"fold_{fold + 1}_train_losses", train_losses)
             trial.set_user_attr(f"fold_{fold + 1}_validation_losses", validation_losses)
             best_epochs.append(best_epoch)
 
-            # Test evaluation
-            avg_test_loss, fold_predictions, fold_true_values = self.evaluate_test_set(
-                model, test_loader, criterion, dual_input=(X2 is not None)
-            )
-            test_losses.append(avg_test_loss)
-
-            mae, rmse = self.evaluate_metrics(fold_predictions, fold_true_values)
-            test_mae_per_fold.append(mae)
-            test_rmse_per_fold.append(rmse)
-
+        # Calculate mean and std metrics across folds
         mean_val_loss = np.mean(fold_results)
         mean_test_loss = np.mean(test_losses)
         mean_test_mae, std_test_mae = np.mean(test_mae_per_fold), np.std(test_mae_per_fold)
@@ -375,4 +399,6 @@ class ModelTrainingPipeline:
         trial.set_user_attr("std_test_rmse", std_test_rmse)
 
         return mean_val_loss, mean_test_loss, model
+
+
 
