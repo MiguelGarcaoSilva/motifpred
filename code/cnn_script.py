@@ -24,7 +24,6 @@ torch.backends.cudnn.benchmark = False
 torch.use_deterministic_algorithms(True)
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-torch.set_float32_matmul_precision('medium')
 torch.cuda.set_per_process_memory_fraction(0.5, device=torch.device('cuda:0'))
 
 ModelTrainingPipeline.set_seed(seed)
@@ -127,7 +126,7 @@ os.makedirs(result_dir, exist_ok=True)
 early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
 pipeline = ModelTrainingPipeline(device=device, early_stopper=early_stopper)
 
-run_optuna_study(pipeline.run_cross_val, CNNX1, model_type, suggestion_dict, model_params_keys, seed, X1, None, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
+#run_optuna_study(pipeline.run_cross_val, CNNX1, model_type, suggestion_dict, model_params_keys, seed, X1, None, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
@@ -156,11 +155,12 @@ plot_best_model_results(
 #     axes[i].legend()
 
 # plt.tight_layout()
+# plt.savefig(os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
 # plt.show()
 
 # # Plot the predictions vs true values for each fold
 # for fold in range(5):
-#     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold)
+#     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
 
 
 # %%
@@ -222,6 +222,33 @@ study = joblib.load(os.path.join(result_dir, "study.pkl"))
 print_study_results(study)
 plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
 
+
+
+# %%
+from utils.utils import plot_preds_vs_truevalues
+from utils.train_pipeline import get_preds_best_config
+
+
+epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, CNNX1_X2Masking, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X1=masking_X1, X2=None, y=y)
+
+# Plot the train and validation losses for each fold
+fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
+for i in range(5):
+    axes[i].plot(epochs_train_losses[i], label="Train Loss")
+    axes[i].plot(epochs_val_losses[i], label="Validation Loss")
+    axes[i].set_title(f"Fold {i + 1}")
+    axes[i].set_xlabel("Epoch")
+    if i == 0:
+        axes[i].set_ylabel("Loss")
+    axes[i].legend()
+
+plt.tight_layout()
+plt.savefig(os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
+plt.show()
+
+# Plot the predictions vs true values for each fold
+for fold in range(5):
+    plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
 
 
 

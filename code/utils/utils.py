@@ -55,12 +55,15 @@ def print_study_results(study):
     print("Number of finished trials: ", len(study.trials))
     print("Best trial:", study.best_trial.number)
     print("Best hyperparameters:", study.best_params)
-    print("Validation Losses", study.best_trial.user_attrs["fold_val_losses"])
-    print("Mean validation loss:", study.best_trial.user_attrs["mean_val_loss"])
-    print("Test Losses", study.best_trial.user_attrs["test_losses"])
-    print("Mean test loss:", study.best_trial.user_attrs["mean_test_loss"])
-    print("Mean test MAE:", study.best_trial.user_attrs["mean_test_mae"])
-    print("Mean test RMSE:", study.best_trial.user_attrs["mean_test_rmse"])
+    print("Validation Losses:", [round(loss, 3) for loss in study.best_trial.user_attrs["fold_val_losses"]])
+    print("Mean validation loss:", round(study.best_trial.user_attrs["mean_val_loss"], 3))
+    print("Test Losses:", [round(loss, 3) for loss in study.best_trial.user_attrs["test_losses"]])
+    print("Mean test loss:", round(study.best_trial.user_attrs["mean_test_loss"], 3))
+    print("Mean test MAE:", round(study.best_trial.user_attrs["mean_test_mae"], 3), 
+          "std:", round(study.best_trial.user_attrs["std_test_mae"], 3))
+    print("Mean test RMSE:", round(study.best_trial.user_attrs["mean_test_rmse"], 3), 
+          "std:", round(study.best_trial.user_attrs["std_test_rmse"], 3))
+
 
 def plot_best_model_results(study_df, save_path=None):
     fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
@@ -91,7 +94,7 @@ def plot_best_model_results(study_df, save_path=None):
     plt.show()
 
 
-def plot_preds_vs_truevalues(true_values, predictions, fold):
+def plot_preds_vs_truevalues(true_values, predictions, fold, save_path=None):
     fig = go.Figure()
     fig.add_trace(go.Scatter(y=true_values, mode='markers', name='True Values'))
     fig.add_trace(go.Scatter(y=predictions, mode='markers', name='Predictions'))
@@ -100,4 +103,6 @@ def plot_preds_vs_truevalues(true_values, predictions, fold):
         xaxis_title="Sample",
         yaxis_title="Value"
     )
+    if save_path:
+        fig.write_image(save_path)
     fig.show()

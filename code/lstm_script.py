@@ -16,7 +16,8 @@ data_dir = '../data/syntheticdata/variables=[0,2]'
 import torch
 from torch import nn
 import torch.optim as optim
-from utils.train_pipeline import ModelTrainingPipeline
+from utils.train_pipeline import EarlyStopper, ModelTrainingPipeline, run_optuna_study
+
 
 seed = 1729
 
@@ -26,8 +27,9 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.cuda.set_per_process_memory_fraction(0.5, device=torch.device('cuda:0'))
 
-
-ModelTrainingPipeline.set_seed(seed)
+early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
+pipeline = ModelTrainingPipeline(device=device, early_stopper=early_stopper)
+pipeline.set_seed(seed)
 
 x = torch.rand(5, 3)
 print(x)
@@ -86,14 +88,13 @@ print("y shape:", y.shape)    # Expected shape: (num_samples, 1)
 
 # %%
 from models.lstm_pytorch import LSTMX1
-from utils.train_pipeline import EarlyStopper, ModelTrainingPipeline, run_optuna_study
 from utils.utils import print_study_results, plot_best_model_results
 
 
 n_trials = 100
 num_epochs = 500
 model_type = "LSTM"
-model_name = "LSTM_X1"
+model_name = "LSTMX1"
 
 suggestion_dict = {
     "learning_rate": {
@@ -121,9 +122,6 @@ model_params_keys = ["hidden_size", "num_layers"]
 result_dir = os.path.join(results_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)  
 
-early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
-pipeline = ModelTrainingPipeline(device=device, early_stopper=early_stopper)
-
 #run_optuna_study(pipeline.run_cross_val, LSTMX1, model_type, suggestion_dict, model_params_keys, seed, X1, None, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
@@ -132,28 +130,28 @@ plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(images_
 
 
 # %%
-from utils.utils import plot_preds_vs_truevalues
-from utils.train_pipeline import get_preds_best_config
+# from utils.utils import plot_preds_vs_truevalues
+# from utils.train_pipeline import get_preds_best_config
 
-epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTMX1, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X1=X1, X2=None, y=y)
+# epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTMX1, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X1=X1, X2=None, y=y)
 
-# Plot the train and validation losses for each fold
-fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
-for i in range(5):
-    axes[i].plot(epochs_train_losses[i], label="Train Loss")
-    axes[i].plot(epochs_val_losses[i], label="Validation Loss")
-    axes[i].set_title(f"Fold {i + 1}")
-    axes[i].set_xlabel("Epoch")
-    if i == 0:
-        axes[i].set_ylabel("Loss")
-    axes[i].legend()
+# # Plot the train and validation losses for each fold
+# fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
+# for i in range(5):
+#     axes[i].plot(epochs_train_losses[i], label="Train Loss")
+#     axes[i].plot(epochs_val_losses[i], label="Validation Loss")
+#     axes[i].set_title(f"Fold {i + 1}")
+#     axes[i].set_xlabel("Epoch")
+#     if i == 0:
+#         axes[i].set_ylabel("Loss")
+#     axes[i].legend()
 
-plt.tight_layout()
-plt.show()
+# plt.tight_layout()
+# plt.show()
 
-# Plot the predictions vs true values for each fold
-for fold in range(5):
-    plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold)
+# # Plot the predictions vs true values for each fold
+# for fold in range(5):
+#     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
 
 
 # %%
@@ -190,15 +188,38 @@ model_params_keys = ["hidden_size", "num_layers"]
 result_dir = os.path.join(results_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)
 
-early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
-pipeline = ModelTrainingPipeline(device=device, early_stopper=early_stopper)
-
-run_optuna_study(pipeline.run_cross_val, LSTMX1_X2BeforeLSTM, model_type, suggestion_dict, model_params_keys, seed, X1, X2, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
+#run_optuna_study(pipeline.run_cross_val, LSTMX1_X2BeforeLSTM, model_type, suggestion_dict, model_params_keys, seed, X1, X2, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 print_study_results(study)
 plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
 
+
+
+# %%
+# from utils.utils import plot_preds_vs_truevalues
+# from utils.train_pipeline import get_preds_best_config
+
+# epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTMX1_X2BeforeLSTM, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X1=X1, X2=X2, y=y)
+
+# # Plot the train and validation losses for each fold
+# fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
+# for i in range(5):
+#     axes[i].plot(epochs_train_losses[i], label="Train Loss")
+#     axes[i].plot(epochs_val_losses[i], label="Validation Loss")
+#     axes[i].set_title(f"Fold {i + 1}")
+#     axes[i].set_xlabel("Epoch")
+#     if i == 0:
+#         axes[i].set_ylabel("Loss")
+#     axes[i].legend()
+
+# plt.tight_layout()
+# plt.savefig(os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
+# plt.show()
+
+# # Plot the predictions vs true values for each fold
+# for fold in range(5):
+#     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
 
 
 # %%
@@ -235,10 +256,7 @@ model_params_keys = ["hidden_size", "num_layers"]
 result_dir = os.path.join(results_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)
 
-early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
-pipeline = ModelTrainingPipeline(device=device, early_stopper=early_stopper)
-
-run_optuna_study(pipeline.run_cross_val, LSTMX1_X2AfterLSTM, model_type, suggestion_dict, model_params_keys, seed, X1, X2, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
+#run_optuna_study(pipeline.run_cross_val, LSTMX1_X2AfterLSTM, model_type, suggestion_dict, model_params_keys, seed, X1, X2, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 print_study_results(study)
@@ -247,12 +265,38 @@ plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(images_
 
 
 # %%
+# from utils.utils import plot_preds_vs_truevalues
+# from utils.train_pipeline import get_preds_best_config
+
+# epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTMX1_X2AfterLSTM, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X1=X1, X2=X2, y=y)
+
+# # Plot the train and validation losses for each fold
+# fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
+# for i in range(5):
+#     axes[i].plot(epochs_train_losses[i], label="Train Loss")
+#     axes[i].plot(epochs_val_losses[i], label="Validation Loss")
+#     axes[i].set_title(f"Fold {i + 1}")
+#     axes[i].set_xlabel("Epoch")
+#     if i == 0:
+#         axes[i].set_ylabel("Loss")
+#     axes[i].legend()
+
+# plt.tight_layout()
+# plt.savefig(os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
+# plt.show()
+
+# # Plot the predictions vs true values for each fold
+# for fold in range(5):
+#     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
+
+
+# %%
 from models.lstm_pytorch import LSTMX1_X2Masking
 
 n_trials = 100
 num_epochs = 500
 model_type = "LSTM"
-model_name = "LSTMX1_X2AfterLSTM"
+model_name = "LSTMX1_X2Masking"
 
 suggestion_dict = {
     "learning_rate": {
@@ -288,15 +332,38 @@ masking_X1 = torch.tensor(masking_X1, dtype=torch.float32)
 result_dir = os.path.join(results_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)
 
-early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
-pipeline = ModelTrainingPipeline(device=device, early_stopper=early_stopper)
-
 run_optuna_study(pipeline.run_cross_val, LSTMX1_X2Masking, model_type, suggestion_dict, model_params_keys, seed, X1, masking_X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 print_study_results(study)
 plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
 
+
+
+# %%
+from utils.utils import plot_preds_vs_truevalues
+from utils.train_pipeline import get_preds_best_config
+
+epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTMX1_X2Masking, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X1=X1, X2=masking_X1, y=y)
+
+# Plot the train and validation losses for each fold
+fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
+for i in range(5):
+    axes[i].plot(epochs_train_losses[i], label="Train Loss")
+    axes[i].plot(epochs_val_losses[i], label="Validation Loss")
+    axes[i].set_title(f"Fold {i + 1}")
+    axes[i].set_xlabel("Epoch")
+    if i == 0:
+        axes[i].set_ylabel("Loss")
+    axes[i].legend()
+
+plt.tight_layout()
+plt.savefig(os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
+plt.show()
+
+# Plot the predictions vs true values for each fold
+for fold in range(5):
+    plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
 
 
 # %%
@@ -332,13 +399,36 @@ model_params_keys = ["hidden_size", "num_layers"]
 result_dir = os.path.join(results_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)
 
-early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
-pipeline = ModelTrainingPipeline(device=device, early_stopper=early_stopper)
-
-run_optuna_study(pipeline.run_cross_val, LSTMAttentionX1, model_type, suggestion_dict, model_params_keys, seed, X1, None, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
+#run_optuna_study(pipeline.run_cross_val, LSTMAttentionX1, model_type, suggestion_dict, model_params_keys, seed, X1, None, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 print_study_results(study)
 plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
+
+# %%
+from utils.utils import plot_preds_vs_truevalues
+from utils.train_pipeline import get_preds_best_config
+
+epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTMAttentionX1, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X1=X1, X2=None, y=y)
+
+# Plot the train and validation losses for each fold
+fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
+for i in range(5):
+    axes[i].plot(epochs_train_losses[i], label="Train Loss")
+    axes[i].plot(epochs_val_losses[i], label="Validation Loss")
+    axes[i].set_title(f"Fold {i + 1}")
+    axes[i].set_xlabel("Epoch")
+    if i == 0:
+        axes[i].set_ylabel("Loss")
+    axes[i].legend()
+
+plt.tight_layout()
+plt.savefig(os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
+plt.show()
+
+# Plot the predictions vs true values for each fold
+for fold in range(5):
+    plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
+
 
 

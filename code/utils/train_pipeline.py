@@ -1,8 +1,5 @@
 import torch
 from torch.utils.data import Dataset, DataLoader, TensorDataset
-from darts.models import TCNModel
-from darts import TimeSeries
-from darts.metrics import mse
 from sklearn.preprocessing import MinMaxScaler
 from utils.timeseries_split import BlockingTimeSeriesSplit
 import numpy as np
@@ -110,23 +107,33 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
 
         if model_type == 'LSTM':
             if X2 is not None:
-                model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(pipeline.device)
+                #model class has masking in the name
+                if 'Masking' in model_class.__name__:
+                    model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=1).to(pipeline.device)
+                else:
+                    model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(pipeline.device)
             else:
                 model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'FFNN':
-            # to solve hidden sizes being seperate hyperparameters
             model_hyperparams["hidden_sizes"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
-       
             input_dim = X1.shape[2] * X1.shape[1] # Flatten the time series
             if X2 is not None:
+                #TODO: Warning: this only works for CNNX1_X2Masking, if impelementing other CNN models, this should be changed
                 model = model_class(input_dim=input_dim + X2.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
             else:
                 model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'CNN':
             if X2 is not None:
-                model = model_class(input_channels=X1.shape[2] + X2.shape[1], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
+                #TODO: Warning: this only works for CNNX1_X2Masking, if impelementing other CNN models, this should be changed
+                model = model_class(input_channels=X1.shape[2] + 1, sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
             else:
                 model = model_class(input_channels=X1.shape[2], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
+        elif model_type == 'TCN':
+            if X2 is not None:
+                model = model_class(input_channels=X1.shape[2] + 1, **model_hyperparams).to(pipeline.device)
+            else:
+                model = model_class(input_channels=X1.shape[2], **model_hyperparams).to(pipeline.device)
+
 
         # Train the model
         fold_val_loss, model, best_epochs, train_losses, validation_losses = pipeline.train_model(
@@ -341,24 +348,32 @@ class ModelTrainingPipeline:
             model_hyperparams = {k: v for k, v in hyperparams.items() if k in model_params_keys}
             if model_type == 'LSTM':
                 if X2 is not None:
-                    model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(self.device)
+                    #model class has masking in the name
+                    if 'Masking' in model_class.__name__:
+                        model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=1).to(pipeline.device)
+                    else:
+                        model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(pipeline.device)
                 else:
                     model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(self.device)
             elif model_type == 'FFNN':
                 input_dim = X1.shape[2] * X1.shape[1] # Flatten the time series
                 if X2 is not None:
-                    #TODO: Warning: this only works for CNNX1_X2Masking, if impelementing other CNN models, this should be changed
+                    #TODO: Warning: this only works for CNNX1_X2Masking, if implement other CNN models, this should be changed
                     model = model_class(input_dim=input_dim + X2.shape[1], **model_hyperparams, output_dim=1).to(self.device)
                 else:
                     model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(self.device)
             elif model_type == 'CNN':
                 if X2 is not None:
-                    #TODO: Warning: this only works for CNNX1_X2Masking, if impelementing other CNN models, this should be changed
+                    #TODO: Warning: this only works for CNNX1_X2Masking, if implement other CNN models, this should be changed
                     model = model_class(input_channels=X1.shape[2] + 1, sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(self.device)
                 else:
                     model = model_class(input_channels=X1.shape[2], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(self.device)
             elif model_type == 'TCN':
-                model = model_class(input_channels=X1.shape[2], **model_hyperparams, output_dim=1, output_activation=None, causal=True).to(self.device)
+                if X2 is not None:
+                    model = model_class(input_channels=X1.shape[2] + 1, **model_hyperparams).to(self.device)
+                else:
+                    model = model_class(input_channels=X1.shape[2], **model_hyperparams).to(self.device)
+
 
 
             # Train the model using the existing train_model method

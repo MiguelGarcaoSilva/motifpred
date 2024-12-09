@@ -2,45 +2,61 @@ import torch
 from pytorch_tcn import TCN
 
 class TCNModel(torch.nn.Module):
-    def __init__(self, input_channels, num_channels, kernel_size, dropout, output_dim, output_activation, causal, pooling_type="mean"):
+    def __init__(self, input_channels, num_channels, kernel_size, dropout):
         super(TCNModel, self).__init__()
-        # Define the TCN model
+        # Define TCN
         self.tcn = TCN(
-            num_inputs=input_channels,  # Number of input features (time series variables)
-            num_channels=num_channels,  # Filters in each residual block
-            kernel_size=kernel_size,  # Size of convolutional kernel
+            num_inputs=input_channels,  # Number of input variables
+            num_channels=num_channels,  # Filters for residual blocks
+            kernel_size=kernel_size,  # Size of convolution kernel
             dropout=dropout,  # Dropout rate
-            output_projection=output_dim,  # Project to desired output dimension
-            output_activation=None,  # No activation for regression
-            causal=True,  # Causal convolutions
-            input_shape="NLC"  # Input shape: (batch_size, sequence_length, num_features)
+            causal=True,  # Use causal convolutions
+            input_shape="NLC",  # Input shape convention
+            output_projection=None,  # Do not directly project
         )
-        # Pooling type to summarize sequence information
-        self.pooling_type = pooling_type
+        # Fully connected layer to map features to single output
+        self.fc = torch.nn.Linear(num_channels[-1], 1)  # Map to scalar value
 
     def forward(self, x):
         """
-        Forward pass through the TCN.
-        
+        Forward pass.
+
         Parameters:
         - x: Input tensor of shape (batch_size, sequence_length, input_channels).
 
         Returns:
-        - Tensor: Final output of shape (batch_size, output_dim).
+        - Tensor: Predicted value of shape (batch_size, 1).
         """
-        tcn_output = self.tcn(x)  # Shape: (batch_size, sequence_length, output_dim)
-        
-        # Summarize the sequence dimension
-        if self.pooling_type == "mean":
-            # Mean pooling
-            pooled_output = torch.mean(tcn_output, dim=1)  # Shape: (batch_size, output_dim)
-        elif self.pooling_type == "max":
-            # Max pooling
-            pooled_output, _ = torch.max(tcn_output, dim=1)  # Shape: (batch_size, output_dim)
-        elif self.pooling_type == "last":
-            # Use the last time step's output
-            pooled_output = tcn_output[:, -1, :]  # Shape: (batch_size, output_dim)
-        else:
-            raise ValueError("Invalid pooling type. Choose from 'mean', 'max', or 'last'.")
-        
-        return pooled_output
+        # Pass through TCN
+        tcn_output = self.tcn(x)  # Shape: (batch_size, sequence_length, num_channels[-1])
+        # Use last time step's features
+        last_step_features = tcn_output[:, -1, :]  # Shape: (batch_size, num_channels[-1])
+        # Predict scalar output
+        output = self.fc(last_step_features)  # Shape: (batch_size, 1)
+        return output
+
+class TCNModel_X2Masking(torch.nn.Module):
+
+    def __init__(self, input_channels, num_channels, kernel_size, dropout):
+        super(TCNModel_X2Masking, self).__init__()
+        self.tcn = TCN(
+            num_inputs=input_channels,  # Number of input variables
+            num_channels=num_channels,  # Filters for residual blocks
+            kernel_size=kernel_size,  # Size of convolution kernel
+            dropout=dropout,  # Dropout rate
+            causal=True,  # Use causal convolutions
+            input_shape="NLC",  # Input shape convention
+            output_projection=None,  # Do not directly project
+        )
+        self.fc = torch.nn.Linear(num_channels[-1], 1)
+
+    def forward(self, x, mask):
+        # X1 is size (batch_size, windown_len, features)
+        # mask is size (batch_size, windown_len)
+        mask = mask.unsqueeze(-1)
+        x = torch.cat((x, mask), dim=2)
+        tcn_output = self.tcn(x)
+        last_step_features = tcn_output[:, -1, :]
+        output = self.fc(last_step_features)
+
+        return output
