@@ -4,13 +4,12 @@ import torch.nn.functional as F
 
 
 class FFNNX1(nn.Module):
-    def __init__(self, input_dim, hidden_sizes, output_dim):
+    def __init__(self, input_dim, hidden_sizes_list, output_dim):
         super(FFNNX1, self).__init__()
 
-        self.hidden_sizes = hidden_sizes
-        self.input_layer = nn.Linear(input_dim, hidden_sizes[0])
-        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]) for i in range(len(hidden_sizes) - 1)])
-        self.output_layer = nn.Linear(hidden_sizes[-1], output_dim)
+        self.input_layer = nn.Linear(input_dim, hidden_sizes_list[0])
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_sizes_list[i], hidden_sizes_list[i + 1]) for i in range(len(hidden_sizes_list) - 1)])
+        self.output_layer = nn.Linear(hidden_sizes_list[-1], output_dim)
 
     def forward(self, x):
         x = x.view(x.size(0), -1)  # Reshape to (batch_size, windown_len * features)
@@ -22,13 +21,12 @@ class FFNNX1(nn.Module):
 
 
 class FFNNX1_X2Masking(nn.Module):
-    def __init__(self, input_dim, hidden_sizes, output_dim):
+    def __init__(self, input_dim, hidden_sizes_list, output_dim):
         super(FFNNX1_X2Masking, self).__init__()
 
-        self.hidden_sizes = hidden_sizes
-        self.input_layer = nn.Linear(input_dim, hidden_sizes[0])
-        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]) for i in range(len(hidden_sizes) - 1)])
-        self.output_layer = nn.Linear(hidden_sizes[-1], output_dim)
+        self.input_layer = nn.Linear(input_dim, hidden_sizes_list[0])
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_sizes_list[i], hidden_sizes_list[i + 1]) for i in range(len(hidden_sizes_list) - 1)])
+        self.output_layer = nn.Linear(hidden_sizes_list[-1], output_dim)
 
     def forward(self, x, mask):
         # X1 is size (batch_size, windown_len, features)
@@ -46,13 +44,12 @@ class FFNNX1_X2Masking(nn.Module):
 
 #TODO: correct this if needed to use, needs to have the auxiliary input
 # class FFNNX1_X2Indices(nn.Module):
-#     def __init__(self, input_dim, hidden_sizes, output_dim):
+#     def __init__(self, input_dim, hidden_sizes_list, output_dim):
 #         super(FFNNX1_X2Indices, self).__init__()
 
-#         self.hidden_sizes = hidden_sizes
-#         self.input_layer = nn.Linear(input_dim, hidden_sizes[0])
-#         self.hidden_layers = nn.ModuleList([nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]) for i in range(len(hidden_sizes) - 1)])
-#         self.output_layer = nn.Linear(hidden_sizes[-1], output_dim)
+#         self.input_layer = nn.Linear(input_dim, hidden_sizes_list[0])
+#         self.hidden_layers = nn.ModuleList([nn.Linear(hidden_sizes_list[i], hidden_sizes_list[i + 1]) for i in range(len(hidden_sizes_list) - 1)])
+#         self.output_layer = nn.Linear(hidden_sizes_list[-1], output_dim)
 
 #     def forward(self, x, indices):
 #         # X1 is size (batch_size, windown_len, features)

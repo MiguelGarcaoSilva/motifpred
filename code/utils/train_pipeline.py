@@ -10,7 +10,20 @@ import optuna
 from typing import Tuple, List
 
 
-def extract_hyperparameters(trial, suggestion_dict):
+def extract_hyperparameters(trial, suggestion_dict, model_type=None):
+    """
+    Extracts hyperparameters from a trial object based on the suggestion dictionary and dynamically handles
+    layer-specific sampling for different model types.
+
+    Args:
+        trial (optuna.Trial): The current Optuna trial.
+        suggestion_dict (dict): Dictionary containing parameter definitions.
+        model_type (str, optional): Type of the model to handle dynamic parameter extraction.
+
+    Returns:
+        dict: Extracted hyperparameters.
+    """
+    # Extract general hyperparameters
     hyperparameters = {
         param_name: getattr(trial, f"suggest_{param_details['type']}")
         (
@@ -19,9 +32,52 @@ def extract_hyperparameters(trial, suggestion_dict):
             **param_details.get('kwargs', {})  # Pass optional keyword arguments
         )
         for param_name, param_details in suggestion_dict.items()
+        if param_name not in {"num_layers", "num_blocks"}  # Handle dynamically later
     }
 
+    # Handle FFNN-specific logic
+    if model_type == "FFNN":
+        num_layers = hyperparameters.pop("num_layers", None)
+        hidden_sizes_to_sample = [16, 32, 64, 128, 256]
+        hyperparameters["hidden_sizes_list"] = [
+            trial.suggest_categorical(f"hidden_size_layer_{i}", hidden_sizes_to_sample)
+            for i in range(num_layers)
+        ]
+
+    # Handle LSTM-specific logic
+    elif model_type == "LSTM":
+        num_layers = hyperparameters.pop("num_layers", None)
+        hidden_sizes_to_sample = [16, 32, 64, 128, 256]
+        hyperparameters["hidden_sizes_list"] = [
+            trial.suggest_categorical(f"hidden_size_layer_{i}", hidden_sizes_to_sample)
+            for i in range(num_layers)
+        ]
+
+    # Handle CNN-specific logic
+    elif model_type == "CNN":
+        num_layers = hyperparameters.pop("num_layers", None)
+        kernel_sizes_to_sample = [3, 5, 7]
+        num_filters_to_sample = [16, 32, 64]
+        hyperparameters["kernel_sizes_list"] = [
+            trial.suggest_categorical(f"kernel_size_layer_{i}", kernel_sizes_to_sample)
+            for i in range(num_layers)
+        ]
+        hyperparameters["num_filters_list"] = [
+            trial.suggest_categorical(f"num_filters_layer_{i}", num_filters_to_sample)
+            for i in range(num_layers)
+        ]
+
+    # Handle TCN-specific logic
+    elif model_type == "TCN":
+        num_blocks = hyperparameters.pop("num_blocks", None)
+        num_channels_to_sample = suggestion_dict.get("num_channels_to_sample", {}).get("args", [16, 32, 64])
+        hyperparameters["num_channels_list"] = [
+            trial.suggest_categorical(f"block_channels_{i}", num_channels_to_sample)
+            for i in range(num_blocks)
+        ]
+
     return hyperparameters
+
 
 
 
@@ -33,23 +89,6 @@ def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, m
     def objective(trial):
         # Extract basic hyperparameters from the suggestion dictionary
         hyperparameters = extract_hyperparameters(trial, suggestion_dict)
-
-        if model_type == "FFNN" and "num_layers" in hyperparameters :
-            num_layers = hyperparameters["num_layers"]
-            hidden_sizes = [
-                trial.suggest_categorical(f"hidden_size_layer_{i}", [16, 32, 64, 128, 256] )
-                for i in range(num_layers)
-            ]
-            hyperparameters["hidden_sizes"] = hidden_sizes
-
-        elif model_type == "TCN" and "num_blocks" in hyperparameters:
-            num_blocks = hyperparameters["num_blocks"]
-            block_channels = [
-                trial.suggest_categorical(f"block_channels_{i}", [16, 32, 64, 128, 256] )
-                for i in range(num_blocks)
-            
-            ]
-            hyperparameters["num_channels"] = block_channels
             
         criterion = torch.nn.MSELoss()  # Define the criterion here
         trial_val_loss, _, _ = objective_func(trial, seed, results_folder, model_class, model_type, X1, y, X2, criterion, num_epochs, hyperparameters, model_params_keys)  # Pass hyperparameters

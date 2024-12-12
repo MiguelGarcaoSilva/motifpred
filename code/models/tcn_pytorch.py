@@ -10,7 +10,7 @@ class TCNModel(torch.nn.Module):
             num_channels=num_channels,  # Filters for residual blocks
             kernel_size=kernel_size,  # Size of convolution kernel
             dropout=dropout,  # Dropout rate
-            causal=True,  # Use causal convolutions
+            causal=False,  
             input_shape="NLC",  # Input shape convention
             output_projection=None,  # Do not directly project
         )
@@ -44,7 +44,7 @@ class TCNModel_X2Masking(torch.nn.Module):
             num_channels=num_channels,  # Filters for residual blocks
             kernel_size=kernel_size,  # Size of convolution kernel
             dropout=dropout,  # Dropout rate
-            causal=True,  # Use causal convolutions
+            causal=False,  # Use causal convolutions
             input_shape="NLC",  # Input shape convention
             output_projection=None,  # Do not directly project
         )
