@@ -1,9 +1,9 @@
 import torch
 from pytorch_tcn import TCN
 
-class TCNModel(torch.nn.Module):
+class TCNX1(torch.nn.Module):
     def __init__(self, input_channels, num_channels, kernel_size, dropout):
-        super(TCNModel, self).__init__()
+        super(TCNX1, self).__init__()
         # Define TCN
         self.tcn = TCN(
             num_inputs=input_channels,  # Number of input variables
@@ -35,10 +35,10 @@ class TCNModel(torch.nn.Module):
         output = self.fc(last_step_features)  # Shape: (batch_size, 1)
         return output
 
-class TCNModel_X2Masking(torch.nn.Module):
+class TCNSeries_X2Masking(torch.nn.Module):
 
     def __init__(self, input_channels, num_channels, kernel_size, dropout):
-        super(TCNModel_X2Masking, self).__init__()
+        super(TCNSeries_X2Masking, self).__init__()
         self.tcn = TCN(
             num_inputs=input_channels,  # Number of input variables
             num_channels=num_channels,  # Filters for residual blocks

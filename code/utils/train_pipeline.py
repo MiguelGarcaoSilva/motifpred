@@ -32,7 +32,6 @@ def extract_hyperparameters(trial, suggestion_dict, model_type=None):
             **param_details.get('kwargs', {})  # Pass optional keyword arguments
         )
         for param_name, param_details in suggestion_dict.items()
-        if param_name not in {"num_layers", "num_blocks"}  # Handle dynamically later
     }
 
     # Handle FFNN-specific logic
@@ -88,7 +87,7 @@ def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, m
     
     def objective(trial):
         # Extract basic hyperparameters from the suggestion dictionary
-        hyperparameters = extract_hyperparameters(trial, suggestion_dict)
+        hyperparameters = extract_hyperparameters(trial, suggestion_dict, model_type=model_type)
             
         criterion = torch.nn.MSELoss()  # Define the criterion here
         trial_val_loss, _, _ = objective_func(trial, seed, results_folder, model_class, model_type, X1, y, X2, criterion, num_epochs, hyperparameters, model_params_keys)  # Pass hyperparameters
@@ -152,25 +151,28 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
                 else:
                     model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(pipeline.device)
             else:
+                #x1 model and indices model
                 model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'FFNN':
             model_hyperparams["hidden_sizes"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
-            input_dim = X1.shape[2] * X1.shape[1] # Flatten the time series
             if X2 is not None:
-                #TODO: Warning: this only works for CNNX1_X2Masking, if impelementing other CNN models, this should be changed
-                model = model_class(input_dim=input_dim + X2.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
-            else:
-                model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(pipeline.device)
+                #TODO: Warning: this only works for CNNX1_X2Masking, if implementing other FFNN models, this should be changed
+                model = model_class(input_dim=X1.shape[2] * X1.shape[1] + X2.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
+            else: 
+                #x1 model and indices model
+                model = model_class(input_dim=X1.shape[2] * X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'CNN':
             if X2 is not None:
-                #TODO: Warning: this only works for CNNX1_X2Masking, if impelementing other CNN models, this should be changed
+                #TODO: Warning: this only works for CNNX1_X2Masking, if implementing other CNN models, this should be changed
                 model = model_class(input_channels=X1.shape[2] + 1, sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
             else:
+                #x1 model and indices model
                 model = model_class(input_channels=X1.shape[2], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'TCN':
             if X2 is not None:
                 model = model_class(input_channels=X1.shape[2] + 1, **model_hyperparams).to(pipeline.device)
             else:
+                #x1 model and indices model
                 model = model_class(input_channels=X1.shape[2], **model_hyperparams).to(pipeline.device)
 
 
@@ -389,9 +391,9 @@ class ModelTrainingPipeline:
                 if X2 is not None:
                     #model class has masking in the name
                     if 'Masking' in model_class.__name__:
-                        model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=1).to(pipeline.device)
+                        model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=1).to(self.device)
                     else:
-                        model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(pipeline.device)
+                        model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(self.device)
                 else:
                     model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(self.device)
             elif model_type == 'FFNN':

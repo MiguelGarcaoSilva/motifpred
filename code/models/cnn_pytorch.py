@@ -78,7 +78,7 @@ class CNNX1(nn.Module):
         return x
 
 
-class CNNX1_X2Masking(nn.Module):
+class CNNX1Series_X2Masking(nn.Module):
     def __init__(self, input_channels, sequence_length, output_dim, 
                  num_filters_list, kernel_sizes_list, pool_size=None):
         """
@@ -92,7 +92,7 @@ class CNNX1_X2Masking(nn.Module):
             kernel_sizes_list (list of int): Kernel size for each convolutional layer.
             pool_size (int or None): Size of the pooling window for max pooling. If None, pooling is skipped.
         """
-        super(CNNX1_X2Masking, self).__init__()
+        super(CNNX1Series_X2Masking, self).__init__()
 
         assert len(num_filters_list) == len(kernel_sizes_list), (
             "Number of convolutional layers must match the lengths of num_filters_list and kernel_sizes_list."
@@ -150,8 +150,3 @@ class CNNX1_X2Masking(nn.Module):
         x = self.fc(x)  # Direct output
 
         return x
-
-
-
-#TODO: implement. how?
-#class CNNX1_X2Indices(nn.Module):

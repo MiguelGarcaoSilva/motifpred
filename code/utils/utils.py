@@ -43,8 +43,8 @@ def create_dataset(data, variable_indexes, lookback_period, step, forecast_perio
         y.append(data_y) 
 
     # Pad X2 sequences to have the same length
-    X2_padded = pad_sequence(X2, batch_first=True, padding_value=-1) # Final shape: (num_samples, max_num_motifs)
-    
+    X2_padded = pad_sequence(X2, batch_first=True, padding_value=-1).unsqueeze(-1) # Final shape: (num_samples, max_num_motifs, 1)
+
     # Convert lists to torch tensors
     X1 = torch.stack(X1)  # Final shape: (num_samples, lookback_period, num_features)
     y = torch.tensor(y, dtype=torch.float32).unsqueeze(1) 
@@ -95,6 +95,9 @@ def plot_best_model_results(study_df, save_path=None):
 
 
 def plot_preds_vs_truevalues(true_values, predictions, fold, save_path=None):
+    #ensure path exists
+    if save_path:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
     fig = go.Figure()
     fig.add_trace(go.Scatter(y=true_values, mode='markers', name='True Values'))
     fig.add_trace(go.Scatter(y=predictions, mode='markers', name='Predictions'))
