@@ -1,24 +1,23 @@
 import torch
 from torch import nn
-import torch.nn.functional as F
 
-# Model 1: LSTM processing only primary input (X1)
-class LSTMX1(nn.Module):
-    def __init__(self, input_dim, hidden_sizes_list, output_dim):
+class LSTM(nn.Module):
+    def __init__(self, input_dim, hidden_sizes_list, output_dim, auxiliary_input_dim=0):
         """
-        Generalized LSTM with variable hidden sizes for each layer.
+        Unified LSTM model that can optionally process auxiliary inputs (e.g., masks).
 
         Args:
-            input_dim (int): Dimension of the input features.
+            input_dim (int): Dimension of the primary input features.
             hidden_sizes_list (list of int): List specifying hidden size for each LSTM layer.
             output_dim (int): Dimension of the output features.
+            auxiliary_input_dim (int): Dimension of the auxiliary input features. Default is 0.
         """
-        super(LSTMX1, self).__init__()
+        super(LSTM, self).__init__()
         self.num_layers = len(hidden_sizes_list)
 
         # LSTM layers
         self.lstm_layers = nn.ModuleList()
-        in_dim = input_dim
+        in_dim = input_dim + auxiliary_input_dim  # Adjust input size based on auxiliary input
         for hidden_size in hidden_sizes_list:
             self.lstm_layers.append(nn.LSTM(input_size=in_dim, hidden_size=hidden_size, batch_first=True))
             in_dim = hidden_size
@@ -26,66 +25,31 @@ class LSTMX1(nn.Module):
         # Fully connected layer to produce the output
         self.output_layer = nn.Linear(hidden_sizes_list[-1], output_dim)
 
-    def forward(self, x):
+    def forward(self, primary_input, auxiliary_input=None):
         """
         Forward pass through the LSTM.
 
         Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, input_dim).
+            primary_input (torch.Tensor): Primary input tensor of shape (batch_size, seq_len, input_dim).
+            auxiliary_input (torch.Tensor, optional): Auxiliary input tensor of shape (batch_size, seq_len). Default is None.
 
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, output_dim).
         """
+        if auxiliary_input is not None:
+            # Concatenate auxiliary input along the feature dimension
+            auxiliary_input = auxiliary_input.unsqueeze(-1)  # Add feature dimension to mask
+            x = torch.cat((primary_input, auxiliary_input), dim=2)
+        else:
+            x = primary_input
+
+        # Pass through LSTM layers
         for lstm in self.lstm_layers:
-            x, _ = lstm(x)  # Forward through each LSTM layer
+            x, _ = lstm(x)
 
         # Use the last hidden state for output
         x = x[:, -1, :]  # Select the last time step's output
         return self.output_layer(x)
-
-
-# Model: LSTM with X1 time series and X2 is masking of indices added as extra feature
-class LSTMX1Series_X2Masking(nn.Module):
-    def __init__(self, input_dim, hidden_sizes_list, output_dim, auxiliary_input_dim):
-        """
-        Args:
-            input_dim (int): Dimension of the primary input features.
-            hidden_sizes_list (list of int): List specifying hidden size for each LSTM layer.
-            output_dim (int): Dimension of the output features.
-            auxiliary_input_dim (int): Dimension of the auxiliary input features.
-        """
-        super(LSTMX1Series_X2Masking, self).__init__()
-        self.num_layers = len(hidden_sizes_list)
-
-        # LSTM layers for processing primary input (X1 + mask)
-        self.lstm_layers = nn.ModuleList()
-        in_dim = input_dim + auxiliary_input_dim
-        for hidden_size in hidden_sizes_list:
-            self.lstm_layers.append(nn.LSTM(input_size=in_dim, hidden_size=hidden_size, batch_first=True))
-            in_dim = hidden_size
-
-        # Fully connected layer that takes LSTM output
-        self.output_layer = nn.Linear(hidden_sizes_list[-1], output_dim)
-
-    def forward(self, primary_input, mask_input):
-        """
-        Forward pass through the LSTM with primary input and mask.
-
-        Args:
-            primary_input (torch.Tensor): Primary input tensor of shape (batch_size, seq_len, input_dim).
-            mask_input (torch.Tensor): Mask input tensor of shape (batch_size, seq_len).
-
-        Returns:
-            torch.Tensor: Output tensor of shape (batch_size, output_dim).
-        """
-        concatenated_input = torch.cat((primary_input, mask_input.unsqueeze(-1)), dim=2)
-
-        for lstm in self.lstm_layers:
-            concatenated_input, _ = lstm(concatenated_input)
-
-        x = concatenated_input[:, -1, :]  # Select the last time step's output
-        return self.output_layer(x)
-
 
 
 # Model: LSTM with secondary input concatenated before the LSTM layer

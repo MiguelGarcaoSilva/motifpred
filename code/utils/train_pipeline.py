@@ -154,7 +154,7 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
                 #x1 model and indices model
                 model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'FFNN':
-            model_hyperparams["hidden_sizes"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
+            model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
             if X2 is not None:
                 #TODO: Warning: this only works for CNNX1_X2Masking, if implementing other FFNN models, this should be changed
                 model = model_class(input_dim=X1.shape[2] * X1.shape[1] + X2.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
@@ -281,11 +281,12 @@ class ModelTrainingPipeline:
             model.train()
             epoch_train_loss = 0
             for batch in train_loader:
+                batch = tuple(t.to(self.device) for t in batch)
                 if dual_input:
-                    batch_X1, batch_X2, batch_y = (t.to(self.device) for t in batch)
+                    batch_X1, batch_X2, batch_y = batch
                     predictions = model(batch_X1, batch_X2)
                 else:
-                    batch_X1, batch_y = (t.to(self.device) for t in batch)
+                    batch_X1, batch_y = batch
                     predictions = model(batch_X1)
 
                 optimizer.zero_grad()
@@ -302,11 +303,12 @@ class ModelTrainingPipeline:
             val_loss = 0
             with torch.no_grad():
                 for batch in val_loader:
+                    batch = tuple(t.to(self.device) for t in batch)
                     if dual_input:
-                        batch_X1, batch_X2, batch_y = (t.to(self.device) for t in batch)
+                        batch_X1, batch_X2, batch_y = batch
                         predictions = model(batch_X1, batch_X2)
                     else:
-                        batch_X1, batch_y = (t.to(self.device) for t in batch)
+                        batch_X1, batch_y = batch
                         predictions = model(batch_X1)
 
                     val_loss += criterion(predictions, batch_y).item()
@@ -397,12 +399,11 @@ class ModelTrainingPipeline:
                 else:
                     model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(self.device)
             elif model_type == 'FFNN':
-                input_dim = X1.shape[2] * X1.shape[1] # Flatten the time series
                 if X2 is not None:
                     #TODO: Warning: this only works for CNNX1_X2Masking, if implement other CNN models, this should be changed
-                    model = model_class(input_dim=input_dim + X2.shape[1], **model_hyperparams, output_dim=1).to(self.device)
+                    model = model_class(input_dim=X1.shape[2] * X1.shape[1] + X2.shape[1], **model_hyperparams, output_dim=1).to(self.device)
                 else:
-                    model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(self.device)
+                    model = model_class(input_dim=X1.shape[2] * X1.shape[1], **model_hyperparams, output_dim=1).to(self.device)
             elif model_type == 'CNN':
                 if X2 is not None:
                     #TODO: Warning: this only works for CNNX1_X2Masking, if implement other CNN models, this should be changed

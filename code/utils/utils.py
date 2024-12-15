@@ -95,9 +95,6 @@ def plot_best_model_results(study_df, save_path=None):
 
 
 def plot_preds_vs_truevalues(true_values, predictions, fold, save_path=None):
-    #ensure path exists
-    if save_path:
-        save_path.parent.mkdir(parents=True, exist_ok=True)
     fig = go.Figure()
     fig.add_trace(go.Scatter(y=true_values, mode='markers', name='True Values'))
     fig.add_trace(go.Scatter(y=predictions, mode='markers', name='Predictions'))
