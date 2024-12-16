@@ -85,14 +85,14 @@ print("y shape:", y.shape)    # Expected shape: (num_samples, 1)
 
 
 # %%
-from models.lstm_pytorch import LSTMX1
+from models.lstm_pytorch import LSTM
 from utils.utils import print_study_results, plot_best_model_results
 
 
 n_trials = 100
 num_epochs = 500
 model_type = "LSTM"
-model_name = "LSTMX1"
+model_name = "LSTMSeries"
 
 suggestion_dict = {
     "learning_rate": {
@@ -116,7 +116,7 @@ model_params_keys = ["hidden_sizes_list"]
 result_dir = os.path.join(results_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)  
 
-run_optuna_study(pipeline.run_cross_val, LSTMX1, model_type, suggestion_dict, model_params_keys, seed, X1, None, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
+#run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, X1, None, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 print_study_results(study)
@@ -124,44 +124,44 @@ plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(images_
 
 
 # %%
-# # from utils.utils import plot_preds_vs_truevalues
-# # from utils.train_pipeline import get_preds_best_config
+# from utils.utils import plot_preds_vs_truevalues
+# from utils.train_pipeline import get_preds_best_config
 
-# # epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTMX1, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X1=X1, X2=None, y=y)
+# epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTM, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X1=X1, X2=None, y=y)
 
-# # # Plot the train and validation losses for each fold
-# # fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
-# # for i in range(5):
-# #     axes[i].plot(epochs_train_losses[i], label="Train Loss")
-# #     axes[i].plot(epochs_val_losses[i], label="Validation Loss")
-# #     axes[i].set_title(f"Fold {i + 1}")
-# #     axes[i].set_xlabel("Epoch")
-# #     if i == 0:
-# #         axes[i].set_ylabel("Loss")
-# #     axes[i].legend()
+# # Plot the train and validation losses for each fold
+# fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
+# for i in range(5):
+#     axes[i].plot(epochs_train_losses[i], label="Train Loss")
+#     axes[i].plot(epochs_val_losses[i], label="Validation Loss")
+#     axes[i].set_title(f"Fold {i + 1}")
+#     axes[i].set_xlabel("Epoch")
+#     if i == 0:
+#         axes[i].set_ylabel("Loss")
+#     axes[i].legend()
 
-# # plt.tight_layout()
-# # plt.show()
+# plt.tight_layout()
+# plt.show()
 
-# # # Plot the predictions vs true values for each fold
-# # for fold in range(5):
-# #     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
-
+# Plot the predictions vs true values for each fold
 # for fold in range(5):
-#     img = mpimg.imread(os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
-#     plt.figure(figsize=(10, 10))
-#     plt.imshow(img)
-#     plt.axis('off')  # Hide axes for a cleaner display
-#     plt.show()
+#     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
+
+for fold in range(5):
+    img = mpimg.imread(os.path.join(images_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
+    plt.figure(figsize=(10, 10))
+    plt.imshow(img)
+    plt.axis('off')  # Hide axes for a cleaner display
+    plt.show()
 
 
 # %%
-from models.lstm_pytorch import LSTMX1Series_X2Masking
+from models.lstm_pytorch import LSTM
 
 n_trials = 100
 num_epochs = 500
 model_type = "LSTM"
-model_name = "LSTMX1Series_X2Masking"
+model_name = "LSTMSeries_X2Masking"
 
 suggestion_dict = {
     "learning_rate": {
@@ -193,7 +193,7 @@ masking_X1 = torch.tensor(masking_X1, dtype=torch.float32)
 result_dir = os.path.join(results_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)
 
-run_optuna_study(pipeline.run_cross_val, LSTMX1Series_X2Masking, model_type, suggestion_dict, model_params_keys, seed, X1, masking_X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
+run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, X1, masking_X1, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 print_study_results(study)
@@ -205,7 +205,7 @@ plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(images_
 # # from utils.utils import plot_preds_vs_truevalues
 # # from utils.train_pipeline import get_preds_best_config
 
-# # epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTMX1_X2Masking, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X1=X1, X2=masking_X1, y=y)
+# # epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTM, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X1=X1, X2=masking_X1, y=y)
 
 # # # Plot the train and validation losses for each fold
 # # fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
@@ -236,14 +236,14 @@ plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(images_
 
 
 # %%
-from models.lstm_pytorch import LSTMX1
+from models.lstm_pytorch import LSTM
 from utils.utils import print_study_results, plot_best_model_results
 
 
 n_trials = 100
 num_epochs = 500
 model_type = "LSTM"
-model_name = "LSTMX1_Indexes"
+model_name = "LSTM_Indexes"
 
 suggestion_dict = {
     "learning_rate": {
@@ -267,7 +267,7 @@ model_params_keys = ["hidden_sizes_list"]
 result_dir = os.path.join(results_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)  
 
-run_optuna_study(pipeline.run_cross_val, LSTMX1, model_type, suggestion_dict, model_params_keys, seed, X2, None, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
+run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, X2, None, y, result_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(result_dir, "study.pkl"))
 print_study_results(study)

@@ -140,16 +140,13 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
             X1_train_scaled, X1_val_scaled, X1_test_scaled, y_train, y_val, y_test, 
             best_config['batch_size'], X2_train, X2_val, X2_test
         )
+
         model_hyperparams = {k: v for k, v in best_config.items() if k in model_params_keys}
 
-
         if model_type == 'LSTM':
+            model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
             if X2 is not None:
-                #model class has masking in the name
-                if 'Masking' in model_class.__name__:
-                    model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=1).to(pipeline.device)
-                else:
-                    model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(pipeline.device)
+                model = model_class(input_dim=X1.shape[2] + 1,  **model_hyperparams, output_dim=1).to(pipeline.device)
             else:
                 #x1 model and indices model
                 model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(pipeline.device)
@@ -162,6 +159,8 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
                 #x1 model and indices model
                 model = model_class(input_dim=X1.shape[2] * X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'CNN':
+            model_hyperparams["kernel_sizes_list"] = [best_config[f"kernel_size_layer_{layer}"] for layer in range(best_config["num_layers"])]
+            model_hyperparams["num_filters_list"] = [best_config[f"num_filters_layer_{layer}"] for layer in range(best_config["num_layers"])]
             if X2 is not None:
                 #TODO: Warning: this only works for CNNX1_X2Masking, if implementing other CNN models, this should be changed
                 model = model_class(input_channels=X1.shape[2] + 1, sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
@@ -391,11 +390,7 @@ class ModelTrainingPipeline:
             model_hyperparams = {k: v for k, v in hyperparams.items() if k in model_params_keys}
             if model_type == 'LSTM':
                 if X2 is not None:
-                    #model class has masking in the name
-                    if 'Masking' in model_class.__name__:
-                        model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=1).to(self.device)
-                    else:
-                        model = model_class(input_dim=X1.shape[2],  **model_hyperparams, output_dim=1, auxiliary_input_dim=X2.shape[1]).to(self.device)
+                    model = model_class(input_dim=X1.shape[2] + 1,  **model_hyperparams, output_dim=1).to(self.device)
                 else:
                     model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(self.device)
             elif model_type == 'FFNN':
