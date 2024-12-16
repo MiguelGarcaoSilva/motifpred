@@ -82,7 +82,7 @@ class CNN(nn.Module):
                 x = self.pooling_layers[i](x)
 
         # Flatten for the fully connected layers
-        x = x.view(x.size(0), -1)  # Flatten to (batch_size, -1)
+        x = x.reshape(x.size(0), -1)  # Flatten to (batch_size, -1)
 
         # Pass through fully connected layers
         x = F.relu(self.fc1(x))

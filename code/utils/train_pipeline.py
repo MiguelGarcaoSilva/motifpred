@@ -169,10 +169,10 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
                 model = model_class(input_channels=X1.shape[2], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'TCN':
             if X2 is not None:
-                model = model_class(input_channels=X1.shape[2] + 1, **model_hyperparams).to(pipeline.device)
+                model = model_class(input_channels=X1.shape[2] + 1, output_dim = 1, **model_hyperparams).to(pipeline.device)
             else:
                 #x1 model and indices model
-                model = model_class(input_channels=X1.shape[2], **model_hyperparams).to(pipeline.device)
+                model = model_class(input_channels=X1.shape[2], output_dim= 1, **model_hyperparams).to(pipeline.device)
 
 
         # Train the model
