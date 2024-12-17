@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 class CNN(nn.Module):
     def __init__(self, input_channels, sequence_length, output_dim, 
-                 num_filters_list, kernel_sizes_list, pool_size=None, hidden_units=128):
+                 num_filters_list, kernel_size, pool_size=None):
         """
         Unified CNN model with optional mask input.
 
@@ -13,15 +13,12 @@ class CNN(nn.Module):
             sequence_length (int): Length of the input sequence.
             output_dim (int): Dimension of the output.
             num_filters_list (list of int): Number of filters for each convolutional layer.
-            kernel_sizes_list (list of int): Kernel size for each convolutional layer.
+            kernel_size (int): Kernel size for each convolutional layer.
             pool_size (int or None): Size of the pooling window for max pooling. If None, pooling is skipped.
             hidden_units (int): Number of hidden units in the fully connected layer.
         """
         super(CNN, self).__init__()
         
-        assert len(num_filters_list) == len(kernel_sizes_list), (
-            "Number of convolutional layers must match the lengths of num_filters_list and kernel_sizes_list."
-        )
 
         self.use_pooling = pool_size is not None
         num_conv_layers = len(num_filters_list)
@@ -36,9 +33,9 @@ class CNN(nn.Module):
                 nn.Conv1d(
                     in_channels=in_channels, 
                     out_channels=num_filters_list[i], 
-                    kernel_size=kernel_sizes_list[i], 
+                    kernel_size=kernel_size, 
                     stride=1, 
-                    padding=kernel_sizes_list[i] // 2  # To maintain input size
+                    padding=kernel_size// 2  # To maintain input size
                 )
             )
             if self.use_pooling:
@@ -53,9 +50,8 @@ class CNN(nn.Module):
         if current_sequence_length <= 0:
             raise ValueError(f"Invalid sequence length after convolution and pooling: {current_sequence_length}. Reduce the number of layers or pooling size.")
 
-        # Fully connected layers
-        self.fc1 = nn.Linear(num_filters_list[-1] * current_sequence_length, hidden_units)
-        self.fc2 = nn.Linear(hidden_units, output_dim)
+        # Fully connected layer
+        self.fc = nn.Linear(num_filters_list[-1] * current_sequence_length, output_dim)
 
     def forward(self, x, mask=None):
         """
@@ -84,7 +80,6 @@ class CNN(nn.Module):
         # Flatten for the fully connected layers
         x = x.reshape(x.size(0), -1)  # Flatten to (batch_size, -1)
 
-        # Pass through fully connected layers
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)  # Output layer
+        # Pass through fully connected layer
+        x = self.fc(x)
         return x

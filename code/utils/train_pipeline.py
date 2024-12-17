@@ -55,12 +55,7 @@ def extract_hyperparameters(trial, suggestion_dict, model_type=None):
     # Handle CNN-specific logic
     elif model_type == "CNN":
         num_layers = hyperparameters.pop("num_layers", None)
-        kernel_sizes_to_sample = [3, 5, 7]
         num_filters_to_sample = [16, 32, 64]
-        hyperparameters["kernel_sizes_list"] = [
-            trial.suggest_categorical(f"kernel_size_layer_{i}", kernel_sizes_to_sample)
-            for i in range(num_layers)
-        ]
         hyperparameters["num_filters_list"] = [
             trial.suggest_categorical(f"num_filters_layer_{i}", num_filters_to_sample)
             for i in range(num_layers)
@@ -159,7 +154,6 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
                 #x1 model and indices model
                 model = model_class(input_dim=X1.shape[2] * X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'CNN':
-            model_hyperparams["kernel_sizes_list"] = [best_config[f"kernel_size_layer_{layer}"] for layer in range(best_config["num_layers"])]
             model_hyperparams["num_filters_list"] = [best_config[f"num_filters_layer_{layer}"] for layer in range(best_config["num_layers"])]
             if X2 is not None:
                 #TODO: Warning: this only works for CNNX1_X2Masking, if implementing other CNN models, this should be changed

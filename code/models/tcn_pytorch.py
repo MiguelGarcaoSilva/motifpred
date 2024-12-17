@@ -108,7 +108,7 @@ class TemporalConvNet(nn.Module):
                                      padding=(kernel_size-1) * dilation_size, dropout=dropout)]
 
         self.network = nn.Sequential(*layers)
-        self.linear = nn.Linear(num_channels[-1], output_dim)
+        self.linear = nn.Linear(num_channels_list[-1], output_dim)
 
 
     def forward(self, x):
