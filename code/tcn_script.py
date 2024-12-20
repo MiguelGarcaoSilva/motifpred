@@ -26,7 +26,7 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.cuda.set_per_process_memory_fraction(0.5, device=torch.device('cuda:0'))
 
-early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100)
+early_stopper = EarlyStopper(patience=10, min_delta=1e-5, min_epochs=100, max_time_minutes=8)
 pipeline = ModelTrainingPipeline(device=device, early_stopper=early_stopper)
 pipeline.set_seed(seed)
 

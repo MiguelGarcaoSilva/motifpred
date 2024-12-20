@@ -7,6 +7,7 @@ import os
 import random
 import joblib
 import optuna
+import time
 from typing import Tuple, List
 
 
@@ -168,7 +169,11 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
             else:
                 #x1 model and indices model
                 model = model_class(input_channels=X1.shape[2], output_dim= 1, **model_hyperparams).to(pipeline.device)
-
+        elif model_type == 'Transformer':
+            if X2 is not None:
+                model = model_class(input_dim=X1.shape[2] + 1, sequence_length=X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
+            else:
+                model = model_class(input_dim=X1.shape[2], sequence_length=X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'Informer':
             if X2 is not None:
                 model = model_class(enc_in=X1.shape[2] + 1, dec_in=X1.shape[2] + 1, c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=pipeline.device).to(pipeline.device)
@@ -209,15 +214,35 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
     return epochs_train_losses, epochs_val_losses, all_predictions, all_true_values
 
 
+
 class EarlyStopper:
-    def __init__(self, patience=1, min_delta=0, min_epochs=0):
+    def __init__(self, patience=1, min_delta=0, min_epochs=100, max_time_minutes=8):
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
         self.min_validation_loss = float('inf')
         self.min_epochs = min_epochs
+        self.start_time = None
+        self.max_time_seconds = max_time_minutes * 60
 
-    def early_stop(self, validation_loss):
+    def start_timer(self):
+        """Initialize the timer at the start of training."""
+        self.start_time = time.time()
+
+    def has_time_exceeded(self):
+        """Check if the training time has exceeded the maximum allowed time."""
+        if self.start_time is None:
+            raise ValueError("Timer not started. Call `start_timer()` at the beginning of training.")
+        elapsed_time = time.time() - self.start_time
+        return elapsed_time > self.max_time_seconds
+
+    def early_stop(self, validation_loss, current_epoch):
+        """Determine if training should stop early."""
+        # Check if training exceeds minimum required epochs
+        if current_epoch < self.min_epochs:
+            return False
+        
+        # Check if validation loss improved
         if validation_loss < self.min_validation_loss:
             self.min_validation_loss = validation_loss
             self.counter = 0
@@ -225,11 +250,20 @@ class EarlyStopper:
             self.counter += 1
             if self.counter >= self.patience:
                 return True
+        
+        # Check if time limit has been exceeded
+        if self.has_time_exceeded():
+            print("Stopping early: Maximum training time exceeded.")
+            return True
+
         return False
-    
+
     def reset(self):
+        """Reset the early stopper's state."""
         self.counter = 0
         self.min_validation_loss = float('inf')
+        self.start_time = None
+
 
 
 class ModelTrainingPipeline:
@@ -277,6 +311,10 @@ class ModelTrainingPipeline:
         best_epoch = num_epochs
         train_losses, validation_losses = [], []
 
+        #start timer for early stopping
+        if self.early_stopper:
+            self.early_stopper.start_timer()
+
         for epoch in range(num_epochs):
             model.train()
             epoch_train_loss = 0
@@ -317,9 +355,10 @@ class ModelTrainingPipeline:
             validation_losses.append(avg_val_loss)
 
             # Early stopping
-            if self.early_stopper and epoch >= self.early_stopper.min_epochs and self.early_stopper.early_stop(avg_val_loss):
+            if self.early_stopper and self.early_stopper.early_stop(avg_val_loss, epoch):
                 print(f"Early stopping at epoch {epoch + 1}, with best epoch being {best_epoch}")
                 break
+
 
             # Save the best model
             if avg_val_loss < best_val_loss:
@@ -411,6 +450,11 @@ class ModelTrainingPipeline:
                     model = model_class(input_channels=X1.shape[2] + 1, **model_hyperparams).to(self.device)
                 else:
                     model = model_class(input_channels=X1.shape[2], **model_hyperparams).to(self.device)
+            elif model_type == 'Transformer':
+                if X2 is not None:
+                    model = model_class(input_dim=X1.shape[2] + 1, sequence_length=X1.shape[1], **model_hyperparams, output_dim=1).to(self.device)
+                else:
+                    model = model_class(input_dim=X1.shape[2], sequence_length=X1.shape[1], **model_hyperparams, output_dim=1).to(self.device)
             elif model_type == 'Informer':
                     if X2 is not None:
                         model = model_class(enc_in=X1.shape[2] + 1, dec_in=X1.shape[2] + 1, c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=self.device).to(self.device)

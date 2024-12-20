@@ -61,8 +61,12 @@ class Informer(nn.Module):
         # self.end_conv2 = nn.Conv1d(in_channels=d_model, out_channels=c_out, kernel_size=1, bias=True)
         self.projection = nn.Linear(d_model, c_out, bias=True)
         
-    def forward(self, x_enc, x_mark_enc=None, x_dec=None, x_mark_dec=None, 
+    def forward(self, x_enc, x2=None, x_mark_enc=None, x_dec=None, x_mark_dec=None, 
                 enc_self_mask=None, dec_self_mask=None, dec_enc_mask=None):
+
+        if mask is not None:
+            x_enc = torch.cat((x_enc, x2), dim=1)
+        
         # Create dummy x_mark_enc if it is not provided
         if x_mark_enc is None:
             batch_size, seq_len, _ = x_enc.shape
