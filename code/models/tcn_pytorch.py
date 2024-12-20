@@ -111,8 +111,15 @@ class TemporalConvNet(nn.Module):
         self.linear = nn.Linear(num_channels_list[-1], output_dim)
 
 
-    def forward(self, x):
+    def forward(self, x, mask = None):
+
+        if mask is not None:
+            # Add a feature dimension to the mask and concatenate it to the input
+            mask = mask.unsqueeze(-1)  # Shape: (batch_size, sequence_length, 1)
+            x = torch.cat((x, mask), dim=2)
+
         x = x.permute(0, 2, 1)  # Reshape to (batch_size, channels, sequence_length)
+
         y1 = self.network(x)
         o = self.linear(y1[:, :, -1]) # just take the last time step features
         return o 

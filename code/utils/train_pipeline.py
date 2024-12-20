@@ -70,6 +70,7 @@ def extract_hyperparameters(trial, suggestion_dict, model_type=None):
             for i in range(num_blocks)
         ]
 
+
     return hyperparameters
 
 
@@ -167,6 +168,12 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
             else:
                 #x1 model and indices model
                 model = model_class(input_channels=X1.shape[2], output_dim= 1, **model_hyperparams).to(pipeline.device)
+
+        elif model_type == 'Informer':
+            if X2 is not None:
+                model = model_class(enc_in=X1.shape[2] + 1, dec_in=X1.shape[2] + 1, c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=pipeline.device).to(pipeline.device)
+            else:
+                model = model_class(enc_in=X1.shape[2], dec_in=X1.shape[2], c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=pipeline.device).to(pipeline.device)
 
 
         # Train the model
@@ -404,7 +411,11 @@ class ModelTrainingPipeline:
                     model = model_class(input_channels=X1.shape[2] + 1, **model_hyperparams).to(self.device)
                 else:
                     model = model_class(input_channels=X1.shape[2], **model_hyperparams).to(self.device)
-
+            elif model_type == 'Informer':
+                    if X2 is not None:
+                        model = model_class(enc_in=X1.shape[2] + 1, dec_in=X1.shape[2] + 1, c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=self.device).to(self.device)
+                    else:
+                        model = model_class(enc_in=X1.shape[2], dec_in=X1.shape[2], c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=self.device).to(self.device)
 
 
             # Train the model using the existing train_model method

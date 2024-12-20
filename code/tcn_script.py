@@ -91,8 +91,8 @@ from models.tcn_pytorch import TemporalConvNet
 from utils.train_pipeline import EarlyStopper, ModelTrainingPipeline, run_optuna_study
 from utils.utils import print_study_results, plot_best_model_results
 
-n_trials = 1
-num_epochs = 50
+n_trials = 100
+num_epochs = 500
 model_type = "TCN"
 model_name = "TCNSeries"
 
@@ -139,8 +139,6 @@ from models.tcn_pytorch import TemporalConvNet
 from utils.train_pipeline import EarlyStopper, ModelTrainingPipeline, run_optuna_study
 from utils.utils import print_study_results, plot_best_model_results
 
-
-
 n_trials = 100
 num_epochs = 500
 model_type = "TCN"
@@ -180,7 +178,6 @@ for i, obs_motif_indexes in enumerate(X2):
         masking_X1[i, idx.item():idx.item()+p] = 1
 
 masking_X1 = torch.tensor(masking_X1, dtype=torch.float32)
-
 
 result_dir = os.path.join(results_dir, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(result_dir, exist_ok=True)
