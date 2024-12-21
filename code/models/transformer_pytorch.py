@@ -41,7 +41,8 @@ class TimeSeriesTransformer(nn.Module):
             d_model=d_model, 
             nhead=n_heads, 
             dim_feedforward=dim_feedforward, 
-            dropout=dropout
+            dropout=dropout,
+            batch_first=True  # Use batch-first for input shape (batch_size, sequence_length, feature_dim)
         )
         self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=e_layers)
 
@@ -49,31 +50,27 @@ class TimeSeriesTransformer(nn.Module):
         self.regression_head = nn.Linear(d_model, output_dim)
 
     def forward(self, x, auxiliary_input=None):
-
-        # x shape: (batch_size, sequence_length, input_dim)
         if auxiliary_input is not None:
-            # Concatenate auxiliary input along the feature dimension
             auxiliary_input = auxiliary_input.unsqueeze(-1)  # Add feature dimension to mask
             x = torch.cat((x, auxiliary_input), dim=2)
-        else:
-            x = x
+
         # Embedding
         x = self.input_embedding(x)  # Shape: (batch_size, sequence_length, d_model)
-        x += self.positional_encoding[:x.size(1), :]  # Add positional encoding
 
-        # Reshape for transformer: (sequence_length, batch_size, d_model)
-        x = x.permute(1, 0, 2)
+        # Ensure positional encoding is on the same device as x
+        x = x + self.positional_encoding[:, :x.size(1), :].to(x.device)
 
-        # Transformer encoder
-        x = self.transformer_encoder(x)  # Shape: (sequence_length, batch_size, d_model)
+        # Transformer encoder (no need to permute due to batch_first=True)
+        x = self.transformer_encoder(x)  # Shape: (batch_size, sequence_length, d_model)
 
         # Take the representation of the last time step
-        x = x[-1, :, :]  # Shape: (batch_size, d_model)
+        x = x[:, -1, :]  # Shape: (batch_size, d_model)
 
         # Regression output
-        output = self.regression_head(x)  # Shape: (batch_size,   output_dim)
+        output = self.regression_head(x)  # Shape: (batch_size, output_dim)
 
         return output
+
 
     def _generate_positional_encoding(self, sequence_length, d_model):
         position = torch.arange(0, sequence_length).unsqueeze(1)

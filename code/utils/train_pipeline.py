@@ -71,7 +71,6 @@ def extract_hyperparameters(trial, suggestion_dict, model_type=None):
             for i in range(num_blocks)
         ]
 
-
     return hyperparameters
 
 
