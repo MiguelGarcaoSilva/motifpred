@@ -100,6 +100,7 @@ def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, m
 
     print("Best hyperparameters:", study.best_params)
 
+
 def get_preds_best_config(study, pipeline, model_class, model_type, model_params_keys, num_epochs, seed, X, y=None):
     pipeline.set_seed(seed)
 
@@ -115,58 +116,77 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
     all_predictions = []
     all_true_values = []
 
-    # Separate features to be scaled (e.g., X1) and not scaled (e.g., X2, X3)
-    scaled_indices = [0]  # Indices of features in X that need to be scaled
-    unscaled_indices = list(set(range(len(X))) - set(scaled_indices))
+    X1, X2, X3 = (X + [None, None])[:3] # deals with unpacking 3 inputs X even if X2 and X3 are None
 
     # Perform cross-validation
     for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X[0])):
-        pipeline.early_stopper.reset()
+        pipeline.early_stopper.reset() 
 
-        # Split data
-        X_train = [x[train_idx] for x in X]
-        X_val = [x[val_index] for x in X]
-        X_test = [x[test_idx] for x in X]
+        # Split and scale data
+        train_val_split_idx = int(0.8 * len(train_idx))
+        train_idx, val_index = train_idx[:train_val_split_idx], train_idx[train_val_split_idx:]
+        X1_train, X1_val, X1_test = X1[train_idx], X1[val_index], X1[test_idx]
         y_train, y_val, y_test = y[train_idx], y[val_index], y[test_idx]
+        X1_train_scaled, X1_val_scaled, X1_test_scaled = pipeline.scale_data(X1_train, X1_val, X1_test)
 
-        # Scale only the required features
-        scaled_data = [pipeline.scale_data(X_train[i], X_val[i], X_test[i]) for i in scaled_indices]
-        for i, (train_scaled, val_scaled, test_scaled) in zip(scaled_indices, scaled_data):
-            X_train[i], X_val[i], X_test[i] = train_scaled, val_scaled, test_scaled
+        if X2 is not None:
+            X2_train, X2_val, X2_test = X2[train_idx], X2[val_index], X2[test_idx]
+        else:
+            X2_train = X2_val = X2_test = None
+
+        if X3 is not None:
+            X3_train, X3_val, X3_test = X3[train_idx], X3[val_index], X3[test_idx]
+        else:
+            X3_train = X3_val = X3_test = None
 
         # Prepare DataLoaders
         train_loader, val_loader, test_loader = pipeline.prepare_dataloaders(
-            *X_train, *X_val, *X_test, y_train, y_val, y_test, best_config['batch_size']
+            X1_train_scaled, X1_val_scaled, X1_test_scaled, y_train, y_val, y_test, 
+            best_config['batch_size'], X2_train, X2_val, X2_test, X3_train, X3_val, X3_test
         )
 
-        # Model hyperparameters
         model_hyperparams = {k: v for k, v in best_config.items() if k in model_params_keys}
 
-        # Define the model based on the type
         if model_type == 'LSTM':
-            model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])]
-            input_dim = sum(x.shape[2] for x in X_train)
-            model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(pipeline.device)
+            model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
+            if X2 is not None:
+                model = model_class(input_dim=X1.shape[2] + 1,  **model_hyperparams, output_dim=1).to(pipeline.device)
+            else:
+                #x1 model and indices model
+                model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'FFNN':
-            model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])]
-            input_dim = sum(x.shape[2] * x.shape[1] for x in X_train)
-            model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(pipeline.device)
+            model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
+            if X2 is not None:
+                #TODO: Warning: this only works for CNNX1_X2Masking, if implementing other FFNN models, this should be changed
+                model = model_class(input_dim=X1.shape[2] * X1.shape[1] + X2.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
+            else: 
+                #x1 model and indices model
+                model = model_class(input_dim=X1.shape[2] * X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'CNN':
             model_hyperparams["num_filters_list"] = [best_config[f"num_filters_layer_{layer}"] for layer in range(best_config["num_layers"])]
-            input_channels = sum(x.shape[2] for x in X_train)
-            model = model_class(input_channels=input_channels, sequence_length=X_train[0].shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
+            if X2 is not None:
+                #TODO: Warning: this only works for CNNX1_X2Masking, if implementing other CNN models, this should be changed
+                model = model_class(input_channels=X1.shape[2] + 1, sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
+            else:
+                #x1 model and indices model
+                model = model_class(input_channels=X1.shape[2], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'TCN':
-            input_channels = sum(x.shape[2] for x in X_train)
-            model = model_class(input_channels=input_channels, output_dim=1, **model_hyperparams).to(pipeline.device)
+            if X2 is not None:
+                model = model_class(input_channels=X1.shape[2] + 1, output_dim = 1, **model_hyperparams).to(pipeline.device)
+            else:
+                #x1 model and indices model
+                model = model_class(input_channels=X1.shape[2], output_dim= 1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'Transformer':
-            input_dim = sum(x.shape[2] for x in X_train)
-            model = model_class(input_dim=input_dim, sequence_length=X_train[0].shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
+            if X2 is not None:
+                model = model_class(input_dim=X1.shape[2] + 1, sequence_length=X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
+            else:
+                model = model_class(input_dim=X1.shape[2], sequence_length=X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'Informer':
-            input_dim = sum(x.shape[2] for x in X_train)
-            model = model_class(
-                enc_in=input_dim, dec_in=input_dim, c_out=1, seq_len=X_train[0].shape[1],
-                label_len=int(X_train[0].shape[1] // 2), out_len=1, **model_hyperparams, device=pipeline.device
-            ).to(pipeline.device)
+            if X2 is not None:
+                model = model_class(enc_in=X1.shape[2] + 1, dec_in=X1.shape[2] + 1, c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=pipeline.device).to(pipeline.device)
+            else:
+                model = model_class(enc_in=X1.shape[2], dec_in=X1.shape[2], c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=pipeline.device).to(pipeline.device)
+
 
         # Train the model
         fold_val_loss, model, best_epochs, train_losses, validation_losses = pipeline.train_model(
