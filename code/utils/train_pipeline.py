@@ -70,6 +70,9 @@ def extract_hyperparameters(trial, suggestion_dict, model_type=None):
             trial.suggest_categorical(f"block_channels_{i}", num_channels_to_sample)
             for i in range(num_blocks)
         ]
+    elif model_type == 'Baseline':
+        return hyperparameters
+
 
     return hyperparameters
 
@@ -187,17 +190,18 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
             else:
                 model = model_class(enc_in=X1.shape[2], dec_in=X1.shape[2], c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=pipeline.device).to(pipeline.device)
 
+        elif model_type == 'Baseline':
+            model = model_class().to(pipeline.device)
 
         # Train the model
-        fold_val_loss, model, best_epochs, train_losses, validation_losses = pipeline.train_model(
-            model,
-            criterion=torch.nn.MSELoss(),
-            optimizer=torch.optim.Adam(model.parameters(), lr=best_config["learning_rate"]),
-            train_loader=train_loader,
-            val_loader=val_loader,
-            num_epochs=num_epochs
-        )
-
+        if model_type == 'Baseline':
+            fold_val_loss, model, best_epochs, train_losses, validation_losses = float('inf'), model, 0, [], []
+        else:
+            fold_val_loss, model, best_epoch, train_losses, validation_losses = pipeline.train_model(
+                model, criterion=torch.nn.MSELoss(), optimizer=torch.optim.Adam(model.parameters(), lr=best_config["learning_rate"]),
+                train_loader=train_loader, val_loader=val_loader, num_epochs=num_epochs
+            )
+            
         # Store training and validation losses
         epochs_train_losses.append(train_losses)
         epochs_val_losses.append(validation_losses)
@@ -476,12 +480,17 @@ class ModelTrainingPipeline:
                     input_dim += 1 if X3 is not None else 0
                     model = model_class(enc_in=input_dim, dec_in=input_dim, c_out=1,  seq_len=X1.shape[1], 
                                         label_len=int(X1.shape[1] // 2), out_len=1, **model_hyperparams, device=self.device).to(self.device)
+                elif model_type == 'Baseline':
+                    model = model_class().to(self.device)
 
-                # Train the model using the existing train_model method
-                fold_val_loss, model, best_epoch, train_losses, validation_losses = self.train_model(
-                    model, criterion, torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate']),
-                    train_loader, val_loader, num_epochs
-                )
+                if model_type == 'Baseline':  # Skip training for the baseline model
+                    fold_val_loss, model, best_epoch, train_losses, validation_losses = float('inf'), model, 0, [], []
+                else:
+                    # Train the model using the existing train_model method
+                    fold_val_loss, model, best_epoch, train_losses, validation_losses = self.train_model(
+                        model, criterion, torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate']),
+                        train_loader, val_loader, num_epochs
+                    )
 
                 # Test evaluation for other models
                 fold_test_loss, test_fold_predictions, test_fold_true_values = self.evaluate_test_set(
