@@ -39,7 +39,7 @@ def create_dataset(data, variable_indexes, lookback_period, step, forecast_perio
         
         # Append to lists
         X1.append(torch.tensor(data_window, dtype=torch.float32))  # Now with shape (lookback_period, num_features)
-        X2.append(torch.tensor(motif_indexes_in_window, dtype=torch.long)) 
+        X2.append(torch.tensor(motif_indexes_in_window, dtype=torch.float32)) 
         y.append(data_y) 
 
     # Pad X2 sequences to have the same length

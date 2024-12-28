@@ -79,7 +79,7 @@ def extract_hyperparameters(trial, suggestion_dict, model_type=None):
 
 
 
-def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, model_params_keys, seed, X, y, results_folder: str, n_trials: int = 100, num_epochs=500):
+def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, model_params_keys, seed, X, y, normalize_flags, results_folder: str, n_trials: int = 100, num_epochs=500):
 
     study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=seed))
     file_name = os.path.join(results_folder, "study.pkl")
@@ -89,7 +89,7 @@ def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, m
         hyperparameters = extract_hyperparameters(trial, suggestion_dict, model_type=model_type)
             
         criterion = torch.nn.MSELoss()  # Define the criterion here
-        trial_val_loss, _, _ = objective_func(trial, seed, results_folder, model_class, model_type, X, y, criterion, num_epochs, hyperparameters, model_params_keys)  # Pass hyperparameters
+        trial_val_loss, _, _ = objective_func(trial, seed, results_folder, model_class, model_type, X, y, normalize_flags, criterion, num_epochs, hyperparameters, model_params_keys)  # Pass hyperparameters
 
         return trial_val_loss
 
@@ -104,8 +104,10 @@ def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, m
     print("Best hyperparameters:", study.best_params)
 
 
-def get_preds_best_config(study, pipeline, model_class, model_type, model_params_keys, num_epochs, seed, X, y=None):
+def get_preds_best_config(study, pipeline, model_class, model_type, model_params_keys, num_epochs, seed, X, y, normalize_flags):
     pipeline.set_seed(seed)
+
+    assert len(normalize_flags) == len(X), "Number of normalization flags must match the number of input features."
 
     # Retrieve the best configuration from the Optuna study
     best_config = study.best_params
@@ -119,48 +121,58 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
     all_predictions = []
     all_true_values = []
 
-    X1, X2, X3 = (X + [None, None])[:3] # deals with unpacking 3 inputs X even if X2 and X3 are None
+    X_inputs= (X + [None, None])[:3] # deals with unpacking 3 inputs X even if X2 and X3 are None    
 
     # Perform cross-validation
     for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X[0])):
         pipeline.early_stopper.reset() 
 
-        # Split and scale data
+        # Split indices for train, validation, and test
         train_val_split_idx = int(0.8 * len(train_idx))
-        train_idx, val_index = train_idx[:train_val_split_idx], train_idx[train_val_split_idx:]
-        X1_train, X1_val, X1_test = X1[train_idx], X1[val_index], X1[test_idx]
-        y_train, y_val, y_test = y[train_idx], y[val_index], y[test_idx]
-        X1_train_scaled, X1_val_scaled, X1_test_scaled = pipeline.scale_data(X1_train, X1_val, X1_test)
+        train_idx, val_idx = train_idx[:train_val_split_idx], train_idx[train_val_split_idx:]
 
+        # Process each input in X_inputs based on normalization flags
+        X1_train = X1_val = X1_test = None
+        X2_train = X2_val = X2_test = None
+        X3_train = X3_val = X3_test = None
 
-        if X2 is not None:
-            X2_train, X2_val, X2_test = X2[train_idx], X2[val_index], X2[test_idx]
-        else:
-            X2_train = X2_val = X2_test = None
+        if X_inputs[0] is not None:
+            X1_train, X1_val, X1_test = X_inputs[0][train_idx], X_inputs[0][val_idx], X_inputs[0][test_idx]
+            if normalize_flags[0]:
+                X1_train, X1_val, X1_test = pipeline.scale_data(X1_train, X1_val, X1_test)
 
-        if X3 is not None:
-            X3_train, X3_val, X3_test = X3[train_idx], X3[val_index], X3[test_idx]
-        else:
-            X3_train = X3_val = X3_test = None
+        if len(X_inputs) > 1 and X_inputs[1] is not None:
+            X2_train, X2_val, X2_test = X_inputs[1][train_idx], X_inputs[1][val_idx], X_inputs[1][test_idx]
+            if normalize_flags[1]:
+                X2_train, X2_val, X2_test = pipeline.scale_data(X2_train, X2_val, X2_test)
+
+        if len(X_inputs) > 2 and X_inputs[2] is not None:
+            X3_train, X3_val, X3_test = X_inputs[2][train_idx], X_inputs[2][val_idx], X_inputs[2][test_idx]
+            if normalize_flags[2]:
+                X3_train, X3_val, X3_test = pipeline.scale_data(X3_train, X3_val, X3_test)
 
         # Prepare DataLoaders
         train_loader, val_loader, test_loader = pipeline.prepare_dataloaders(
-            X1_train_scaled, X1_val_scaled, X1_test_scaled, y_train, y_val, y_test, 
-            best_config['batch_size'], X2_train, X2_val, X2_test, X3_train, X3_val, X3_test
+            X1_train, X1_val, X1_test,
+            y_train=y[train_idx], y_val=y[val_idx], y_test=y[test_idx],
+            batch_size=best_config['batch_size'],
+            X2_train=X2_train, X2_val=X2_val, X2_test=X2_test,
+            X3_train=X3_train, X3_val=X3_val, X3_test=X3_test
         )
 
         model_hyperparams = {k: v for k, v in best_config.items() if k in model_params_keys}
+        X1, X2, X3 = (X + [None, None])[:3] # deals with unpacking 3 inputs X even if X2 and X3 are None
 
         if model_type == 'LSTM':
             model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
-            if X2 is not None:
+            if len(X_inputs) > 1 and X_inputs[1] is not None:
                 model = model_class(input_dim=X1.shape[2] + 1,  **model_hyperparams, output_dim=1).to(pipeline.device)
             else:
                 #x1 model and indices model
                 model = model_class(input_dim=X1.shape[2], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'FFNN':
             model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
-            if X2 is not None:
+            if len(X_inputs) > 1 and X_inputs[1] is not None:
                 #TODO: Warning: this only works for CNNX1_X2Masking, if implementing other FFNN models, this should be changed
                 model = model_class(input_dim=X1.shape[2] * X1.shape[1] + X2.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
             else: 
@@ -168,25 +180,25 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
                 model = model_class(input_dim=X1.shape[2] * X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'CNN':
             model_hyperparams["num_filters_list"] = [best_config[f"num_filters_layer_{layer}"] for layer in range(best_config["num_layers"])]
-            if X2 is not None:
+            if len(X_inputs) > 1 and X_inputs[1] is not None:
                 #TODO: Warning: this only works for CNNX1_X2Masking, if implementing other CNN models, this should be changed
                 model = model_class(input_channels=X1.shape[2] + 1, sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
             else:
                 #x1 model and indices model
                 model = model_class(input_channels=X1.shape[2], sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'TCN':
-            if X2 is not None:
+            if len(X_inputs) > 1 and X_inputs[1] is not None:
                 model = model_class(input_channels=X1.shape[2] + 1, output_dim = 1, **model_hyperparams).to(pipeline.device)
             else:
                 #x1 model and indices model
                 model = model_class(input_channels=X1.shape[2], output_dim= 1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'Transformer':
-            if X2 is not None:
+            if len(X_inputs) > 1 and X_inputs[1] is not None:
                 model = model_class(input_dim=X1.shape[2] + 1, sequence_length=X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
             else:
                 model = model_class(input_dim=X1.shape[2], sequence_length=X1.shape[1], **model_hyperparams, output_dim=1).to(pipeline.device)
         elif model_type == 'Informer':
-            if X2 is not None:
+            if len(X_inputs) > 1 and X_inputs[1] is not None:
                 model = model_class(enc_in=X1.shape[2] + 1, dec_in=X1.shape[2] + 1, c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=pipeline.device).to(pipeline.device)
             else:
                 model = model_class(enc_in=X1.shape[2], dec_in=X1.shape[2], c_out=1,  seq_len=X1.shape[1], label_len=int(X1.shape[1] // 2), out_len=1,   **model_hyperparams, device=pipeline.device).to(pipeline.device)
@@ -305,6 +317,8 @@ class ModelTrainingPipeline:
 
     def prepare_dataloaders(self, X1_train, X1_val, X1_test, y_train, y_val, y_test, batch_size, 
                             X2_train=None, X2_val=None, X2_test=None, X3_train=None, X3_val=None, X3_test=None):
+
+                            
         if X2_train is not None and X3_train is not None:
             train_loader = DataLoader(TensorDataset(X1_train, X2_train, X3_train, y_train), batch_size=batch_size, shuffle=True)
             val_loader = DataLoader(TensorDataset(X1_val, X2_val, X3_val, y_val), batch_size=len(X1_val), shuffle=False)
@@ -414,41 +428,52 @@ class ModelTrainingPipeline:
 
 
  
-    def run_cross_val(self, trial, seed, results_folder, model_class, model_type, X, y, 
+    def run_cross_val(self, trial, seed, results_folder, model_class, model_type, X, y, normalize_flags,
                         criterion=torch.nn.MSELoss(), num_epochs=500, hyperparams=None, model_params_keys=None):
             self.set_seed(seed)
             fold_results, best_epochs, test_losses, test_mae_per_fold, test_rmse_per_fold = [], [], [], [], []
 
-            X1, X2, X3 = (X + [None, None])[:3] # deals with unpacking 3 inputs X even if X2 and X3 are None
+            X_inputs = (X + [None, None])[:3] # deals with unpacking 3 inputs X even if X2 and X3 are None
 
-            for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X1)):
+            for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X[0])):
                 self.early_stopper.reset()
 
-                # Split and scale data
+                # Split indices for train, validation, and test
                 train_val_split_idx = int(0.8 * len(train_idx))
-                train_idx, val_index = train_idx[:train_val_split_idx], train_idx[train_val_split_idx:]
-                X1_train, X1_val, X1_test = X1[train_idx], X1[val_index], X1[test_idx]
-                y_train, y_val, y_test = y[train_idx], y[val_index], y[test_idx]
-                X1_train_scaled, X1_val_scaled, X1_test_scaled = self.scale_data(X1_train, X1_val, X1_test)
+                train_idx, val_idx = train_idx[:train_val_split_idx], train_idx[train_val_split_idx:]
 
-                if X2 is not None:
-                    X2_train, X2_val, X2_test = X2[train_idx], X2[val_index], X2[test_idx]
-                else:
-                    X2_train = X2_val = X2_test = None
+                # Process each input in X_inputs based on normalization flags
+                X1_train = X1_val = X1_test = None
+                X2_train = X2_val = X2_test = None
+                X3_train = X3_val = X3_test = None
 
-                if X3 is not None:
-                    X3_train, X3_val, X3_test = X3[train_idx], X3[val_index], X3[test_idx]
-                else:
-                    X3_train = X3_val = X3_test = None
+                if X_inputs[0] is not None:
+                    X1_train, X1_val, X1_test = X_inputs[0][train_idx], X_inputs[0][val_idx], X_inputs[0][test_idx]
+                    if normalize_flags[0]:
+                        X1_train, X1_val, X1_test = self.scale_data(X1_train, X1_val, X1_test)
+
+                if len(X_inputs) > 1 and X_inputs[1] is not None:
+                    X2_train, X2_val, X2_test = X_inputs[1][train_idx], X_inputs[1][val_idx], X_inputs[1][test_idx]
+                    if normalize_flags[1]:
+                        X2_train, X2_val, X2_test = self.scale_data(X2_train, X2_val, X2_test)
+
+                if len(X_inputs) > 2 and X_inputs[2] is not None:
+                    X3_train, X3_val, X3_test = X_inputs[2][train_idx], X_inputs[2][val_idx], X_inputs[2][test_idx]
+                    if normalize_flags[2]:
+                        X3_train, X3_val, X3_test = self.scale_data(X3_train, X3_val, X3_test)
 
                 # Prepare DataLoaders
                 train_loader, val_loader, test_loader = self.prepare_dataloaders(
-                    X1_train_scaled, X1_val_scaled, X1_test_scaled, y_train, y_val, y_test, 
-                    hyperparams['batch_size'], X2_train, X2_val, X2_test, X3_train, X3_val, X3_test
+                    X1_train, X1_val, X1_test,
+                    y_train=y[train_idx], y_val=y[val_idx], y_test=y[test_idx],
+                    batch_size=hyperparams['batch_size'],
+                    X2_train=X2_train, X2_val=X2_val, X2_test=X2_test,
+                    X3_train=X3_train, X3_val=X3_val, X3_test=X3_test
                 )
-    
+
                 model_hyperparams = {k: v for k, v in hyperparams.items() if k in model_params_keys}
-                
+                X1, X2, X3 = (X + [None, None])[:3] # deals with unpacking 3 inputs X even if X2 and X3 are None
+                        
                 # Adjust model input dimensions based on X2 and X3
                 if model_type == 'LSTM':
                     input_dim = X1.shape[2]
