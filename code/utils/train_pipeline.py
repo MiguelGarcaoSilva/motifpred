@@ -132,6 +132,7 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
         y_train, y_val, y_test = y[train_idx], y[val_index], y[test_idx]
         X1_train_scaled, X1_val_scaled, X1_test_scaled = pipeline.scale_data(X1_train, X1_val, X1_test)
 
+
         if X2 is not None:
             X2_train, X2_val, X2_test = X2[train_idx], X2[val_index], X2[test_idx]
         else:

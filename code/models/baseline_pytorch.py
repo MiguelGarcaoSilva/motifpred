@@ -5,35 +5,46 @@ class BaselineAverageModel(nn.Module):
     def __init__(self):
         """
         Initialize the baseline model.
-
         """
         super(BaselineAverageModel, self).__init__()
 
-    def forward(self, X=None, mask=None, indexes=None):
+    def forward(self, X, mask, indexes):
         """
-        Forward pass: calculate the average of the differences between consecutive values.
+        Forward pass: predict the timepoints needed for a new repetition after X ends.
 
         Args:
+        - X (Tensor): Input tensor, size (batch_size, window_len, feature_dim).
+        - mask (Tensor): Optional mask tensor, size (batch_size, window_len).
         - indexes (Tensor): Input tensor, size (batch_size, window_len, 1).
 
         Returns:
-        - Tensor: Average differences, size (batch_size, 1).
+        - Tensor: Predicted timepoints, size (batch_size, 1).
         """
         # Ensure indexes is float and maintain its device
         indexes = indexes.float()
-        batch_avg_differences = []
+        batch_predictions = []
         device = indexes.device  # Get the device of the input tensor
 
         for batch in indexes:  # Iterate over batches
             valid_values = batch[batch != -1]  # Remove padding (-1 values)
             if len(valid_values) <= 1:  # Not enough values to compute differences
-                batch_avg_differences.append(torch.tensor(0.0, device=device))
+                batch_predictions.append(torch.tensor(0.0, device=device))
             else:
                 differences = valid_values[1:] - valid_values[:-1]  # Consecutive differences
-                avg_difference = torch.mean(differences)
-                batch_avg_differences.append(avg_difference)
+                avg_difference = torch.mean(differences)  # Average interval
 
-        return torch.tensor(batch_avg_differences, device=device).unsqueeze(1)  # Return as (batch_size, 1)
+
+                x_length = X.size(1)  # Length of X (timepoints)
+
+                last_index = valid_values[-1]
+                next_prediction = last_index + avg_difference
+                time_to_next_repetition = next_prediction - x_length
+                time_to_next_repetition = 0 if time_to_next_repetition < 0 else time_to_next_repetition
+                batch_predictions.append(time_to_next_repetition)
+
+        return torch.tensor(batch_predictions, device=device).unsqueeze(1)  # Return as (batch_size, 1)
+
+
 
 
 
@@ -47,29 +58,36 @@ class Baseline_NaiveLastDifference(nn.Module):
         """
         super(Baseline_NaiveLastDifference, self).__init__()
 
-    def forward(self, X=None, mask = None, indexes=None):
+
+    def forward(self, X, mask, indexes):
         """
-        Forward pass: return the last value in the sequence.
+        Forward pass: predict the timepoints needed for a new repetition after X ends.
 
         Args:
+        - X (Tensor): Input tensor, size (batch_size, window_len, feature_dim).
+        - mask (Tensor): Optional mask tensor, size (batch_size, window_len).
         - indexes (Tensor): Input tensor, size (batch_size, window_len, 1).
 
         Returns:
-        - Tensor: difference between the last two values in the sequence, size (batch_size, 1).
+        - Tensor: Predicted timepoints, size (batch_size, 1).
         """
         # Remove padding in window_len, preserving batch structure
         indexes = indexes.float()
-        batch_results = []
+        batch_predictions = []
 
         for batch in indexes:  # Iterate over batches
-            valid_values = batch[batch != -1]
-            if len(valid_values) == 0:
-                batch_results.append(torch.tensor(0.0, device=indexes.device))
+            valid_values = batch[batch != -1]  # Remove padding (-1 values)
+            if len(valid_values) <= 1:
+                batch_predictions.append(torch.tensor(0.0, device=indexes.device))
             else:
-                if len(valid_values) == 1:
-                    batch_results.append(valid_values[0])
-                else:
-                    batch_results.append(valid_values[-1] - valid_values[-2])
+                # Use the last difference as the interval
+                last_difference = valid_values[-1] - valid_values[-2]
+                x_length = X.size(1)  # Length of X (timepoints)
 
-        return torch.tensor(batch_results, device=indexes.device).unsqueeze(1)  # Return as (batch_size, 1)
-    
+                last_index = valid_values[-1]  # Last index in the sequence
+                next_prediction = last_index + last_difference  # Next index prediction
+                time_to_next_repetition = next_prediction - x_length 
+                time_to_next_repetition = 0 if time_to_next_repetition < 0 else time_to_next_repetition
+                batch_predictions.append(time_to_next_repetition)
+
+        return torch.tensor(batch_predictions, device=indexes.device).unsqueeze(1)  # Return as (batch_size, 1)
