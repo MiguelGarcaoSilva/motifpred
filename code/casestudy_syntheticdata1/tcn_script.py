@@ -42,7 +42,6 @@ motif_indexes = np.genfromtxt(MOTIF_INDEXES_PATH, delimiter=",").astype(int)
 
 print(motif_indexes)
 
-
 # %%
 from utils.timeseries_split import BlockingTimeSeriesSplit
 
@@ -71,14 +70,15 @@ step = 5 #step size for the sliding window
 forecast_period = 50 #forward window size
 
 #X_series: past window, X_indices: indexes of the motif in the window,  y: next relative index of the motif
-X_series, X_indices, y = create_dataset(data, VARIABLES_PATTERN, lookback_period, step, forecast_period, motif_indexes)
+X_series, X_indices, y = create_dataset(data, lookback_period, step, forecast_period, motif_indexes)
 
 #X_series is (num_samples, lookback_period, num_features)
 X_mask = np.zeros((X_series.shape[0], X_series.shape[1])) 
 
 for i, obs_motif_indexes in enumerate(X_indices):
     for j, idx in enumerate(obs_motif_indexes):
-        X_mask[i, idx.item():idx.item()+P] = 1
+        idx = int(idx)
+        X_mask[i, idx:idx+P] = 1
 
 X_mask = torch.tensor(X_mask, dtype=torch.float32)
 
@@ -90,15 +90,14 @@ print("y shape:", y.shape)    # Expected shape: (num_samples, 1)
 
 
 # %%
-from models.cnn_pytorch import CNN
+from models.tcn_pytorch import TemporalConvNet
 from utils.train_pipeline import run_optuna_study
 from utils.utils import print_study_results, plot_best_model_results
 
-
 n_trials = 100
 num_epochs = 500
-model_type = "CNN"
-model_name = "CNNSeries"
+model_type = "TCN"
+model_name = "TCNSeries"
 
 suggestion_dict = {
     "learning_rate": {
@@ -106,17 +105,17 @@ suggestion_dict = {
         "args": [1e-5, 1e-3],
         "kwargs": {"log": True}
     },
-    "num_layers": {
-        "type": "categorical",
-        "args": [[1, 2, 3]]
-    },
     "kernel_size": {
         "type": "categorical",
         "args": [[3, 5, 7]]
     },
-    "pool_size": {
+    "num_blocks": {
         "type": "categorical",
-        "args": [[None, 2, 3]]
+        "args": [[3, 5, 7]]
+    },
+    "dropout": {
+        "type": "float",
+        "args": [0.0, 0.5]
     },
     "batch_size": {
         "type": "categorical",
@@ -124,12 +123,59 @@ suggestion_dict = {
     }
 }
 
-model_params_keys = ["kernel_size", "num_filters_list", "pool_size"]
+model_params_keys = ["kernel_size", "num_channels_list", "dropout"]
 
 model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(model_results_dir, exist_ok=True)
 
-run_optuna_study(pipeline.run_cross_val, CNN, model_type, suggestion_dict, model_params_keys, seed, [X_series], y, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+run_optuna_study(pipeline.run_cross_val, TemporalConvNet, model_type, suggestion_dict, model_params_keys, seed, [X_series], y, [True], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+
+study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
+print_study_results(study)
+plot_best_model_results(
+    study.trials_dataframe(),
+    save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png")
+)
+
+# %%
+from models.tcn_pytorch import TemporalConvNet
+from utils.utils import print_study_results, plot_best_model_results
+
+n_trials = 100
+num_epochs = 500
+model_type = "TCN"
+model_name = "TCNSeries_X2Masking"
+
+suggestion_dict = {
+    "learning_rate": {
+        "type": "float",
+        "args": [1e-5, 1e-3],
+        "kwargs": {"log": True}
+    },
+    "kernel_size": {
+        "type": "categorical",
+        "args": [[3, 5, 7]]
+    },
+    "num_blocks": {
+        "type": "categorical",
+        "args": [[3, 5, 7]]
+    },
+    "dropout": {
+        "type": "float",
+        "args": [0.0, 0.5]
+    },
+    "batch_size": {
+        "type": "categorical",
+        "args": [[16, 32, 64, 128]]
+    }
+}
+
+model_params_keys = ["kernel_size", "num_channels_list", "dropout"]
+
+model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
+os.makedirs(model_results_dir, exist_ok=True)
+
+run_optuna_study(pipeline.run_cross_val, TemporalConvNet, model_type, suggestion_dict, model_params_keys, seed, [X_series, X_mask], y, [True, False], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
 print_study_results(study)
@@ -143,7 +189,7 @@ plot_best_model_results(
 # from utils.train_pipeline import get_preds_best_config
 
 
-# epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, CNN, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X=[X_series], y=y)
+# epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, CNNX1_X2Masking, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X=[X_series, X_mask], y=y)
 
 # # Plot the train and validation losses for each fold
 # fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
@@ -171,137 +217,6 @@ plot_best_model_results(
 #     plt.imshow(img)
 #     plt.axis('off')  # Hide axes for a cleaner display
 #     plt.show()
-
-
-# %%
-from models.cnn_pytorch import CNN
-from utils.utils import print_study_results, plot_best_model_results
-
-n_trials = 100
-num_epochs = 500
-model_type = "CNN"
-model_name = "CNNSeries_X2Masking"
-
-suggestion_dict = {
-    "learning_rate": {
-        "type": "float",
-        "args": [1e-5, 1e-3],
-        "kwargs": {"log": True}
-    },
-    "num_layers": {
-        "type": "categorical",
-        "args": [[1, 2, 3]]
-    },
-    "kernel_size": {
-        "type": "categorical",
-        "args": [[3, 5, 7]]
-    },
-    "pool_size": {
-        "type": "categorical",
-        "args": [[None, 2, 3]]
-    },
-    "batch_size": {
-        "type": "categorical",
-        "args": [[16, 32, 64, 128]]
-    }
-}
-
-
-model_params_keys = ["kernel_size", "num_filters_list", "pool_size"]
-
-model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
-os.makedirs(model_results_dir, exist_ok=True)  
-
-run_optuna_study(pipeline.run_cross_val, CNN, model_type, suggestion_dict, model_params_keys, seed, [X_series, X_mask], y, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
-
-study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
-print_study_results(study)
-plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
-
-
-
-# %%
-# from utils.utils import plot_preds_vs_truevalues
-# from utils.train_pipeline import get_preds_best_config
-
-
-# epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, CNN, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X=[X_series, X_mask], y=y)
-
-# # Plot the train and validation losses for each fold
-# fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
-# for i in range(5):
-#     axes[i].plot(epochs_train_losses[i], label="Train Loss")
-#     axes[i].plot(epochs_val_losses[i], label="Validation Loss")
-#     axes[i].set_title(f"Fold {i + 1}")
-#     axes[i].set_xlabel("Epoch")
-#     if i == 0:
-#         axes[i].set_ylabel("Loss")
-#     axes[i].legend()
-
-# plt.tight_layout()
-# plt.savefig(os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
-# plt.show()
-
-# # Plot the predictions vs true values for each fold
-# for fold in range(5):
-#     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
-
-
-# for fold in range(5):
-#     img = mpimg.imread(os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
-#     plt.figure(figsize=(10, 10))
-#     plt.imshow(img)
-#     plt.axis('off')  # Hide axes for a cleaner display
-#     plt.show()
-
-
-# %%
-from models.cnn_pytorch import CNN
-from utils.utils import print_study_results, plot_best_model_results
-
-
-n_trials = 100
-num_epochs = 500
-model_type = "CNN"
-model_name = "CNNIndexes"
-
-suggestion_dict = {
-    "learning_rate": {
-        "type": "float",
-        "args": [1e-5, 1e-3],
-        "kwargs": {"log": True}
-    },
-    "num_layers": {
-        "type": "categorical",
-        "args": [[1, 2, 3, 4]]
-    },
-    "kernel_size": {
-        "type": "categorical",
-        "args": [[3, 5, 7]]
-    },
-    "pool_size": {
-        "type": "categorical",
-        "args": [[None]]
-    },
-    "batch_size": {
-        "type": "categorical",
-        "args": [[16, 32, 64, 128]]
-    }
-}
-
-model_params_keys = ["kernel_size", "num_filters_list", "pool_size"]
-
-model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
-os.makedirs(model_results_dir, exist_ok=True)
-
-run_optuna_study(pipeline.run_cross_val, CNN, model_type, suggestion_dict, model_params_keys, seed, [X_indices], y, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
-
-study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
-print_study_results(study)
-plot_best_model_results(
-    study.trials_dataframe(),
-    save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png")
-)
 
 
 

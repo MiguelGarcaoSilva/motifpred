@@ -302,10 +302,23 @@ class ModelTrainingPipeline:
 
     @staticmethod
     def scale_data(X_train, X_val, X_test):
+        def scale_subset(X, scaler):
+            # Create a mask for unmasked values (not equal to -1)
+            mask = X != -1
+            # Flatten the data and apply the mask to select unmasked values
+            unmasked_values = X[mask].view(-1, 1).numpy()
+            # Scale only the unmasked values
+            scaled_values = scaler.fit_transform(unmasked_values)
+            # Create a copy of the original data and replace unmasked values with scaled values
+            scaled_X = X.clone()
+            scaled_X[mask] = torch.tensor(scaled_values.flatten(), dtype=torch.float32)
+            return scaled_X
+
         scaler = MinMaxScaler(feature_range=(0, 1))
-        X_train = torch.tensor(scaler.fit_transform(X_train.view(-1, X_train.shape[-1])), dtype=torch.float32).view(X_train.shape)
-        X_val = torch.tensor(scaler.transform(X_val.view(-1, X_val.shape[-1])), dtype=torch.float32).view(X_val.shape)
-        X_test = torch.tensor(scaler.transform(X_test.view(-1, X_test.shape[-1])), dtype=torch.float32).view(X_test.shape)
+        X_train = scale_subset(X_train, scaler)
+        X_val = scale_subset(X_val, scaler)
+        X_test = scale_subset(X_test, scaler)
+        
         return X_train, X_val, X_test
 
     @staticmethod

@@ -5,7 +5,7 @@ from torch.nn.utils.rnn import pad_sequence
 import torch
 import plotly.graph_objects as go
 
-def create_dataset(data, variable_indexes, lookback_period, step, forecast_period, motif_indexes):
+def create_dataset(data, lookback_period, step, forecast_period, motif_indexes):
     X1, X2, y = [], [], []  # X1: data, X2: indexes of the motifs, y: distance to the next motif
     
     for idx in range(len(data[0]) - lookback_period - 1):
@@ -29,7 +29,7 @@ def create_dataset(data, variable_indexes, lookback_period, step, forecast_perio
             next_match_in_forecast_period = -1  # No match in the forecast period but exists in the future
 
         # Get the data window and transpose to (lookback_period, num_features)
-        data_window = data[variable_indexes, idx:window_end_idx].T
+        data_window = data[:, idx:window_end_idx].T
 
         # Calculate `y`
         data_y = -1
