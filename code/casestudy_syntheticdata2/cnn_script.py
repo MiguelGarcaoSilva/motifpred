@@ -10,7 +10,7 @@ import matplotlib.image as mpimg
 import optuna
 import random
 import joblib
-from config import RESULTS_DIR, IMAGES_DIR, DATA_DIR, DATASET_PATH, MOTIF_INDEXES_PATH, VARIABLES_PATTERN, K, N, P
+from config import RESULTS_DIR, IMAGES_DIR, DATA_DIR, DATASET_PATH, MOTIF_INDEXES_PATH, K, N, P
 
 print(f"Results will be saved in: {RESULTS_DIR}")
 print(f"Images will be saved in: {IMAGES_DIR}")
@@ -91,50 +91,60 @@ print("y shape:", y.shape)    # Expected shape: (num_samples, 1)
 
 
 # %%
-from models.ffnn_pytorch import FFNN
+from models.cnn_pytorch import CNN
 from utils.train_pipeline import run_optuna_study
 from utils.utils import print_study_results, plot_best_model_results
 
+
 n_trials = 100
 num_epochs = 500
-model_type = "FFNN"
-model_name = "FFNNSeries"
+model_type = "CNN"
+model_name = "CNNSeries"
 
 suggestion_dict = {
     "learning_rate": {
         "type": "float",
-        "args": [1e-5, 1e-3], 
-        "kwargs": {"log": True} 
+        "args": [1e-5, 1e-3],
+        "kwargs": {"log": True}
     },
     "num_layers": {
         "type": "categorical",
-        "args": [[1, 2, 3, 4]] 
-    },        
+        "args": [[1, 2, 3]]
+    },
+    "kernel_size": {
+        "type": "categorical",
+        "args": [[3, 5, 7]]
+    },
+    "pool_size": {
+        "type": "categorical",
+        "args": [[None, 2, 3]]
+    },
     "batch_size": {
         "type": "categorical",
-        "args": [[16, 32, 64, 128]] 
+        "args": [[16, 32, 64, 128]]
     }
 }
 
-model_params_keys = ["hidden_sizes_list"]
-
+model_params_keys = ["kernel_size", "num_filters_list", "pool_size"]
 
 model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
-os.makedirs(model_results_dir, exist_ok=True)  
+os.makedirs(model_results_dir, exist_ok=True)
 
-#run_optuna_study(pipeline.run_cross_val, FFNN, model_type, suggestion_dict, model_params_keys, seed, [X_series], y, [True], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+run_optuna_study(pipeline.run_cross_val, CNN, model_type, suggestion_dict, model_params_keys, seed, [X_series], y, [True], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
 print_study_results(study)
-plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
-
+plot_best_model_results(
+    study.trials_dataframe(),
+    save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png")
+)
 
 # %%
 from utils.utils import plot_preds_vs_truevalues
 from utils.train_pipeline import get_preds_best_config
 
 
-epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, FFNN, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X=[X_series], y=y, normalize_flags=[True])
+epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, CNN, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X=[X_series], y=y, normalize_flags=[True])
 
 # Plot the train and validation losses for each fold
 fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
@@ -151,80 +161,7 @@ plt.tight_layout()
 plt.savefig(os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
 plt.show()
 
-#Plot the predictions vs true values for each fold
-# for fold in range(5):
-#    plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
-
-# for fold in range(5):
-#     img = mpimg.imread(os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
-#     plt.figure(figsize=(10, 10))
-#     plt.imshow(img)
-#     plt.axis('off')  # Hide axes for a cleaner display
-#     plt.show()
-
-
-
-# %%
-from models.ffnn_pytorch import FFNN
-from utils.train_pipeline import run_optuna_study
-from utils.train_pipeline import EarlyStopper, ModelTrainingPipeline
-
-n_trials = 100
-num_epochs = 500
-model_type = "FFNN"
-model_name = "FFNNSeries_Masking"
-
-suggestion_dict = {
-    "learning_rate": {
-        "type": "float",
-        "args": [1e-5, 1e-3], 
-        "kwargs": {"log": True} 
-    },
-    "num_layers": {
-        "type": "categorical",
-        "args": [[1, 2, 3, 4, 5]] 
-    },        
-    "batch_size": {
-        "type": "categorical",
-        "args": [[16, 32, 64, 128]] 
-    }
-}
-
-model_params_keys = ["hidden_sizes_list"]
-
-model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
-os.makedirs(model_results_dir, exist_ok=True)  
-
-run_optuna_study(pipeline.run_cross_val, FFNN, model_type, suggestion_dict, model_params_keys, seed, [X_series, X_mask], y, [True, False], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
-
-study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
-print_study_results(study)
-plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
-
-
-# %%
-from utils.utils import plot_preds_vs_truevalues
-from utils.train_pipeline import get_preds_best_config
-
-
-epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, FFNN, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X=[X_series, X_mask], y=y, normalize_flags=[True, False])
-
-# Plot the train and validation losses for each fold
-fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
-for i in range(5):
-    axes[i].plot(epochs_train_losses[i], label="Train Loss")
-    axes[i].plot(epochs_val_losses[i], label="Validation Loss")
-    axes[i].set_title(f"Fold {i + 1}")
-    axes[i].set_xlabel("Epoch")
-    if i == 0:
-        axes[i].set_ylabel("Loss")
-    axes[i].legend()
-
-# plt.tight_layout()
-# plt.savefig(os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
-# plt.show()
-
-# # Plot the predictions vs true values for each fold
+# Plot the predictions vs true values for each fold
 # for fold in range(5):
 #     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
 
@@ -238,49 +175,58 @@ for i in range(5):
 
 
 # %%
-from models.ffnn_pytorch import FFNN
-from utils.train_pipeline import run_optuna_study
+from models.cnn_pytorch import CNN
 from utils.utils import print_study_results, plot_best_model_results
 
 n_trials = 100
 num_epochs = 500
-model_type = "FFNN"
-model_name = "FFNNIndexes"
+model_type = "CNN"
+model_name = "CNNSeries_X2Masking"
 
 suggestion_dict = {
     "learning_rate": {
         "type": "float",
-        "args": [1e-5, 1e-3], 
-        "kwargs": {"log": True} 
+        "args": [1e-5, 1e-3],
+        "kwargs": {"log": True}
     },
     "num_layers": {
         "type": "categorical",
-        "args": [[1, 2, 3, 4]] 
-    },        
+        "args": [[1, 2, 3]]
+    },
+    "kernel_size": {
+        "type": "categorical",
+        "args": [[3, 5, 7]]
+    },
+    "pool_size": {
+        "type": "categorical",
+        "args": [[None, 2, 3]]
+    },
     "batch_size": {
         "type": "categorical",
-        "args": [[16, 32, 64, 128]] 
+        "args": [[16, 32, 64, 128]]
     }
 }
 
-model_params_keys = ["hidden_sizes_list"]
 
+model_params_keys = ["kernel_size", "num_filters_list", "pool_size"]
 
 model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(model_results_dir, exist_ok=True)  
 
-run_optuna_study(pipeline.run_cross_val, FFNN, model_type,suggestion_dict,  model_params_keys, seed, [X_indices], y, [True], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+run_optuna_study(pipeline.run_cross_val, CNN, model_type, suggestion_dict, model_params_keys, seed, [X_series, X_mask], y, [True, False], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
 print_study_results(study)
 plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
+
+
 
 # %%
 from utils.utils import plot_preds_vs_truevalues
 from utils.train_pipeline import get_preds_best_config
 
 
-epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, FFNN, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X=[X_indices], y=y, normalize_flags=[True])
+epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, CNN, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X=[X_series, X_mask], y=y, normalize_flags=[True, False])
 
 # Plot the train and validation losses for each fold
 fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
@@ -297,7 +243,7 @@ plt.tight_layout()
 plt.savefig(os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
 plt.show()
 
-#Plot the predictions vs true values for each fold
+# Plot the predictions vs true values for each fold
 # for fold in range(5):
 #     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
 
@@ -311,50 +257,86 @@ plt.show()
 
 
 # %%
-# from models.ffnn_pytorch import FFNN
-# from utils.train_pipeline import EarlyStopper, ModelTrainingPipeline
-
-# n_trials = 100
-# num_epochs = 500
-# model_type = "FFNN"
-# model_name = "FFNNSeries_Masking_Indexes"
-
-# suggestion_dict = {
-#     "learning_rate": {
-#         "type": "float",
-#         "args": [1e-5, 1e-3], 
-#         "kwargs": {"log": True} 
-#     },
-#     "num_layers": {
-#         "type": "categorical",
-#         "args": [[1, 2, 3, 4, 5]] 
-#     },        
-#     "batch_size": {
-#         "type": "categorical",
-#         "args": [[16, 32, 64, 128]] 
-#     }
-# }
-
-# model_params_keys = ["hidden_sizes_list"]
-
-# #X1 shape is (num_samples, lookback_period, num_features)
-# masking_X1 = np.zeros((X1.shape[0], X1.shape[1])) 
-
-# for i, obs_motif_indexes in enumerate(X2):
-#     for j, idx in enumerate(obs_motif_indexes):
-#         masking_X1[i, idx.item():idx.item()+p] = 1
-
-# masking_X1 = torch.tensor(masking_X1, dtype=torch.float32)
+from models.cnn_pytorch import CNN
+from utils.utils import print_study_results, plot_best_model_results
 
 
-# model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
-# os.makedirs(model_results_dir, exist_ok=True)  
+n_trials = 100
+num_epochs = 500
+model_type = "CNN"
+model_name = "CNNIndexes"
 
-# run_optuna_study(pipeline.run_cross_val, FFNN, model_type, suggestion_dict, model_params_keys, seed, [X1, masking_X1, indexes], y, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+suggestion_dict = {
+    "learning_rate": {
+        "type": "float",
+        "args": [1e-5, 1e-3],
+        "kwargs": {"log": True}
+    },
+    "num_layers": {
+        "type": "categorical",
+        "args": [[1, 2, 3, 4]]
+    },
+    "kernel_size": {
+        "type": "categorical",
+        "args": [[3, 5, 7]]
+    },
+    "pool_size": {
+        "type": "categorical",
+        "args": [[None]]
+    },
+    "batch_size": {
+        "type": "categorical",
+        "args": [[16, 32, 64, 128]]
+    }
+}
 
-# study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
-# print_study_results(study)
-# plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
+model_params_keys = ["kernel_size", "num_filters_list", "pool_size"]
+
+model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
+os.makedirs(model_results_dir, exist_ok=True)
+
+run_optuna_study(pipeline.run_cross_val, CNN, model_type, suggestion_dict, model_params_keys, seed, [X_indices], y, [True], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+
+study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
+print_study_results(study)
+plot_best_model_results(
+    study.trials_dataframe(),
+    save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png")
+)
+
+
+# %%
+from utils.utils import plot_preds_vs_truevalues
+from utils.train_pipeline import get_preds_best_config
+
+epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, CNN, model_type, model_params_keys, num_epochs =num_epochs, seed=seed, X=[X_indices], y=y, normalize_flags=[True])
+
+# Plot the train and validation losses for each fold
+fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
+for i in range(5):
+    axes[i].plot(epochs_train_losses[i], label="Train Loss")
+    axes[i].plot(epochs_val_losses[i], label="Validation Loss")
+    axes[i].set_title(f"Fold {i + 1}")
+    axes[i].set_xlabel("Epoch")
+    if i == 0:
+        axes[i].set_ylabel("Loss")
+    axes[i].legend()
+
+plt.tight_layout()
+plt.savefig(os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))
+plt.show()
+
+# Plot the predictions vs true values for each fold
+# for fold in range(5):
+#     plot_preds_vs_truevalues(np.ravel(all_true_values[fold]), np.ravel(all_predictions[fold]), fold, save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
+
+
+# for fold in range(5):
+#     img = mpimg.imread(os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_fold_{fold}_predictions.png"))
+#     plt.figure(figsize=(10, 10))
+#     plt.imshow(img)
+#     plt.axis('off')  # Hide axes for a cleaner display
+#     plt.show()
 
 
 

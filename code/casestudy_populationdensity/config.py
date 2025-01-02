@@ -16,7 +16,7 @@ SUBSQUENCES_LENGTHS = [6]
 
 # Derived directories
 RESULTS_DIR = BASE_DIR / 'results' / CASE_STUDY 
-RESULTS_MOTIF_DIR = RESULTS_DIR / 'mp'/ DATASET / f"norm_{NORMALIZE}" / f"topk_{TOP_K_MP}" / f"excl_{STUMPY_EXCL_ZONE_DENOM}" / f"include_{INCLUDE}"
+RESULTS_MOTIF_DIR = RESULTS_DIR / 'mp'/ DATASET 
 IMAGES_DIR = BASE_DIR / 'images' / CASE_STUDY  
 DATA_DIR = BASE_DIR / 'data' / CASE_STUDY
 
