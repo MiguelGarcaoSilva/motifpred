@@ -186,7 +186,7 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
         elif model_type == 'CNN':
             input_channels = input_dim
             model_hyperparams["num_filters_list"] = [best_config[f"num_filters_layer_{layer}"] for layer in range(best_config["num_layers"])]
-            model = model_class(input_channels=input_channels, sequence_length=X1.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
+            model = model_class(input_channels=input_channels, sequence_length=X_train.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'TCN':
             input_channels = input_dim
             model = model_class(input_channels=input_channels, output_dim=1, **model_hyperparams).to(pipeline.device)
@@ -352,7 +352,7 @@ class ModelTrainingPipeline:
             elif input_flags["series"] and input_flags["mask"] and not input_flags["indices"]:
                 X = torch.cat((series, mask.unsqueeze(-1)), dim=2)
             elif not input_flags["series"] and not input_flags["mask"] and input_flags["indices"]:
-                X = indices.squeeze(-1)
+                X = indices
             elif input_flags["series"] and input_flags["mask"] and input_flags["indices"]:
                 raise ValueError("To implement.")
 
@@ -519,15 +519,15 @@ class ModelTrainingPipeline:
                     model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(self.device)
                 elif model_type == 'CNN':
                     input_channels = input_dim
-                    model = model_class(input_channels=input_channels, sequence_length=X1_train.shape[2], **model_hyperparams, output_dim=1,).to(self.device)
+                    model = model_class(input_channels=input_channels, sequence_length=X_train.shape[1], **model_hyperparams, output_dim=1,).to(self.device)
                 elif model_type == 'TCN':
                     input_channels = input_dim
                     model = model_class(input_channels=input_channels, **model_hyperparams, output_dim=1).to(self.device)
                 elif model_type == 'Transformer':
-                    model = model_class(input_dim=input_dim, sequence_length=X1_train.shape[1], **model_hyperparams, output_dim=1).to(self.device)
+                    model = model_class(input_dim=input_dim, sequence_length=X_train.shape[1], **model_hyperparams, output_dim=1).to(self.device)
                 elif model_type == 'Informer':
-                    model = model_class(enc_in=input_dim, dec_in=input_dim, c_out=1,  seq_len=X1_train.shape[1], 
-                                        label_len=int(X1_train.shape[1] // 2), **model_hyperparams,  out_len=1, device=self.device).to(self.device)
+                    model = model_class(enc_in=input_dim, dec_in=input_dim, c_out=1,  seq_len=X_train.shape[1], 
+                                        label_len=int(X_train.shape[1] // 2), **model_hyperparams,  out_len=1, device=self.device).to(self.device)
                 elif model_type == 'Baseline':
                     model = model_class().to(self.device)
 

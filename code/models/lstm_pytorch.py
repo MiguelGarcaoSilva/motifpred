@@ -25,7 +25,7 @@ class LSTM(nn.Module):
         # Fully connected layer to produce the output
         self.output_layer = nn.Linear(hidden_sizes_list[-1], output_dim)
 
-    def forward(self, primary_input):
+    def forward(self, x):
         """
         Forward pass through the LSTM.
 
