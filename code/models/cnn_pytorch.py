@@ -53,21 +53,15 @@ class CNN(nn.Module):
         # Fully connected layer
         self.fc = nn.Linear(num_filters_list[-1] * current_sequence_length, output_dim)
 
-    def forward(self, x, mask=None):
+    def forward(self, x):
         """
         Forward pass through the CNN.
 
         Args:
             x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, input_channels).
-            mask (torch.Tensor, optional): Mask tensor of shape (batch_size, sequence_length). Default is None.
-
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, output_dim).
         """
-        if mask is not None:
-            # Add a feature dimension to the mask and concatenate it to the input
-            mask = mask.unsqueeze(-1)  # Shape: (batch_size, sequence_length, 1)
-            x = torch.cat((x, mask), dim=2)
 
         x = x.permute(0, 2, 1)  # Reshape to (batch_size, channels, sequence_length)
 

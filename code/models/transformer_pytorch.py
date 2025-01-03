@@ -49,10 +49,7 @@ class TimeSeriesTransformer(nn.Module):
         # Regression output layer
         self.regression_head = nn.Linear(d_model, output_dim)
 
-    def forward(self, x, auxiliary_input=None):
-        if auxiliary_input is not None:
-            auxiliary_input = auxiliary_input.unsqueeze(-1)  # Add feature dimension to mask
-            x = torch.cat((x, auxiliary_input), dim=2)
+    def forward(self, x):
 
         # Embedding
         x = self.input_embedding(x)  # Shape: (batch_size, sequence_length, d_model)

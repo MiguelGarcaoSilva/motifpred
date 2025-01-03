@@ -111,7 +111,7 @@ suggestion_dict = {
     },
     "num_blocks": {
         "type": "categorical",
-        "args": [[3, 5, 7]]
+        "args": [[1, 2, 3]]
     },
     "dropout": {
         "type": "float",
@@ -158,7 +158,7 @@ suggestion_dict = {
     },
     "num_blocks": {
         "type": "categorical",
-        "args": [[3, 5, 7]]
+        "args": [[1, 2, 3]]
     },
     "dropout": {
         "type": "float",

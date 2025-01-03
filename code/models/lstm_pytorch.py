@@ -25,23 +25,15 @@ class LSTM(nn.Module):
         # Fully connected layer to produce the output
         self.output_layer = nn.Linear(hidden_sizes_list[-1], output_dim)
 
-    def forward(self, primary_input, auxiliary_input=None):
+    def forward(self, primary_input):
         """
         Forward pass through the LSTM.
 
         Args:
             primary_input (torch.Tensor): Primary input tensor of shape (batch_size, seq_len, input_dim).
-            auxiliary_input (torch.Tensor, optional): Auxiliary input tensor of shape (batch_size, seq_len). Default is None.
-
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, output_dim).
         """
-        if auxiliary_input is not None:
-            # Concatenate auxiliary input along the feature dimension
-            auxiliary_input = auxiliary_input.unsqueeze(-1)  # Add feature dimension to mask
-            x = torch.cat((primary_input, auxiliary_input), dim=2)
-        else:
-            x = primary_input
 
         # Pass through LSTM layers
         for lstm in self.lstm_layers:
