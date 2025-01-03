@@ -17,6 +17,7 @@ N = 100000  # Number of data points
 K = 3       # Number of variables
 P = 5       # Pattern length
 VARIABLES_PATTERN = [0,2]
+NORMALIZE_FLAGS = {"X_series": True, "X_mask": False, "X_indices": True}
 
 DATASET_PATH = DATA_DIR / f"scenario2_n={N}_k={K}_p={P}_max_interval=45_variables={VARIABLES_PATTERN}.csv"
 MOTIF_INDEXES_PATH = DATA_DIR / f"motif_indexes_scenario2_n={N}_k={K}_p={P}_max_interval=45.csv"

@@ -121,8 +121,10 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
 
     # Extract input data from the dictionary, with None defaults
     X_series, X_mask, X_indices = X.get('X_series'), X.get('X_mask'), X.get('X_indices')
+    
+    data_indices = X_series if X_series is not None else X_indices
 
-    for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X_series)):
+    for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(data_indices)):
         pipeline.early_stopper.reset()
 
         # Split indices for train, validation, and test
@@ -336,7 +338,7 @@ class ModelTrainingPipeline:
             elif input_flags["series"] and input_flags["mask"] and not input_flags["indices"]:
                 X = torch.cat((series.view(series.size(0), -1), mask), dim=1)
             elif not input_flags["series"] and not input_flags["mask"] and input_flags["indices"]:
-                X = indices
+                X = indices.squeeze(-1)
             elif input_flags["series"] and input_flags["mask"] and input_flags["indices"]:
                 X = torch.cat((series.view(series.size(0), -1), mask, indices), dim=1)
             else:
@@ -350,14 +352,13 @@ class ModelTrainingPipeline:
             elif input_flags["series"] and input_flags["mask"] and not input_flags["indices"]:
                 X = torch.cat((series, mask.unsqueeze(-1)), dim=2)
             elif not input_flags["series"] and not input_flags["mask"] and input_flags["indices"]:
-                X = indices
+                X = indices.squeeze(-1)
             elif input_flags["series"] and input_flags["mask"] and input_flags["indices"]:
                 raise ValueError("To implement.")
 
             input_dim = X.size(2)
 
         return X , input_dim
-
 
 
     def train_model(self, model, criterion, optimizer, train_loader, val_loader, num_epochs=1000):
@@ -375,10 +376,8 @@ class ModelTrainingPipeline:
             epoch_train_loss = 0
             for batch in train_loader:
                 batch = tuple(t.to(self.device) for t in batch)
-                
-                # Dynamically unpack inputs based on the number of inputs
-                *inputs, batch_y = batch
-                predictions = model(*inputs)
+                input, batch_y = batch
+                predictions = model(input)
 
                 optimizer.zero_grad()
                 loss = criterion(predictions, batch_y)
@@ -395,10 +394,9 @@ class ModelTrainingPipeline:
             with torch.no_grad():
                 for batch in val_loader:
                     batch = tuple(t.to(self.device) for t in batch)
-                    
-                    # Dynamically unpack inputs based on the number of inputs
-                    *inputs, batch_y = batch
-                    predictions = model(*inputs)
+
+                    input, batch_y = batch
+                    predictions = model(input)
 
                     val_loss += criterion(predictions, batch_y).item()
 
@@ -457,9 +455,10 @@ class ModelTrainingPipeline:
 
             #get X from X dictionary, if doesnt exist, set to None
             X_series, X_mask, X_indices = X.get('X_series'), X.get('X_mask'), X.get('X_indices')
+            
+            data_indices = X_series if X_series is not None else X_indices
 
-            #TODO: solve split
-            for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(X.get('X_series'))):
+            for fold, (train_idx, test_idx) in enumerate(BlockingTimeSeriesSplit(n_splits=5).split(data_indices)):
                 self.early_stopper.reset()
 
                 # Split indices for train, validation, and test
