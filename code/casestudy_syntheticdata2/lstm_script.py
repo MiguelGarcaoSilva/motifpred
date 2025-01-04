@@ -10,7 +10,7 @@ import matplotlib.image as mpimg
 import optuna
 import random
 import joblib
-from config import RESULTS_DIR, IMAGES_DIR, DATA_DIR, DATASET_PATH, MOTIF_INDEXES_PATH, K, N, P
+from config import RESULTS_DIR, IMAGES_DIR, DATA_DIR, DATASET_PATH, MOTIF_INDEXES_PATH, K, N, P, NORMALIZE_FLAGS
 
 print(f"Results will be saved in: {RESULTS_DIR}")
 print(f"Images will be saved in: {IMAGES_DIR}")
@@ -123,7 +123,8 @@ model_params_keys = ["hidden_sizes_list"]
 model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(model_results_dir, exist_ok=True)  
 
-run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, [X_series], y, [True], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+X = {"X_series": X_series}
+#run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
 print_study_results(study)
@@ -134,7 +135,7 @@ plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(IMAGES_
 from utils.utils import plot_preds_vs_truevalues
 from utils.train_pipeline import get_preds_best_config
 
-epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTM, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X=[X_series], y=y, normalize_flags=[True])
+epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTM, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X=X, y=y, normalize_flags=NORMALIZE_FLAGS)
 
 # Plot the train and validation losses for each fold
 fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
@@ -191,7 +192,8 @@ model_params_keys = ["hidden_sizes_list"]
 model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(model_results_dir, exist_ok=True)
 
-run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, [X_series, X_mask], y, [True, False], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+X = {"X_series": X_series, "X_mask": X_mask}
+#run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
 print_study_results(study)
@@ -203,7 +205,7 @@ plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(IMAGES_
 from utils.utils import plot_preds_vs_truevalues
 from utils.train_pipeline import get_preds_best_config
 
-epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTM, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X=[X_series, X_mask], y=y, normalize_flags=[True, False])
+epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTM, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X=X, y=y, normalize_flags=NORMALIZE_FLAGS)
 
 # Plot the train and validation losses for each fold
 fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
@@ -265,7 +267,8 @@ model_params_keys = ["hidden_sizes_list"]
 model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(model_results_dir, exist_ok=True)  
 
-run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, [X_indices], y, [True], model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+X_indices = {"X_indices": X_indices}
+run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
 print_study_results(study)
@@ -273,21 +276,21 @@ plot_best_model_results(study.trials_dataframe(), save_path=os.path.join(IMAGES_
 
 
 # %%
-# from utils.utils import plot_preds_vs_truevalues
-# from utils.train_pipeline import get_preds_best_config
+from utils.utils import plot_preds_vs_truevalues
+from utils.train_pipeline import get_preds_best_config
 
-# epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTM, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X=[X_indices], y=y, normalize_flags=[True])
+epochs_train_losses, epochs_val_losses, all_predictions, all_true_values = get_preds_best_config(study, pipeline, LSTM, model_type, model_params_keys, num_epochs = num_epochs, seed=seed, X=X, y=y, normalize_flags=NORMALIZE_FLAGS)
 
-# # Plot the train and validation losses for each fold
-# fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
-# for i in range(5):
-#     axes[i].plot(epochs_train_losses[i], label="Train Loss")
-#     axes[i].plot(epochs_val_losses[i], label="Validation Loss")
-#     axes[i].set_title(f"Fold {i + 1}")
-#     axes[i].set_xlabel("Epoch")
-#     if i == 0:
-#         axes[i].set_ylabel("Loss")
-#     axes[i].legend()
+# Plot the train and validation losses for each fold
+fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), sharey=True)
+for i in range(5):
+    axes[i].plot(epochs_train_losses[i], label="Train Loss")
+    axes[i].plot(epochs_val_losses[i], label="Validation Loss")
+    axes[i].set_title(f"Fold {i + 1}")
+    axes[i].set_xlabel("Epoch")
+    if i == 0:
+        axes[i].set_ylabel("Loss")
+    axes[i].legend()
 
 # plt.tight_layout()
 # plt.savefig(os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png"))

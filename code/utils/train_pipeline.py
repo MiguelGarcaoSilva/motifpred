@@ -317,10 +317,9 @@ class ModelTrainingPipeline:
 
     def prepare_dataloaders(self, X_train, X_val, X_test, y_train, y_val, y_test, batch_size):
 
-                            
         train_loader = DataLoader(TensorDataset(X_train, y_train), batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(TensorDataset(X_val, y_val), batch_size=batch_size, shuffle=False)
-        test_loader = DataLoader(TensorDataset(X_test, y_test), batch_size=batch_size, shuffle=False)
+        val_loader = DataLoader(TensorDataset(X_val, y_val), batch_size=len(X_val), shuffle=False)
+        test_loader = DataLoader(TensorDataset(X_test, y_test), batch_size=len(X_test), shuffle=False)
 
         return train_loader, val_loader, test_loader
 
