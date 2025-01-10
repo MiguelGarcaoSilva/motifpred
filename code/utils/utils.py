@@ -51,6 +51,58 @@ def create_dataset(data, lookback_period, step, forecast_period, motif_indexes):
 
     return X1, X2_padded, y
 
+
+
+def create_multi_motif_dataset(data, lookback_period, step, forecast_period, motif_indexes_list):
+    X1, X2, mask, y = [], [], []
+
+    for idx in range(0, len(data[0]) - lookback_period - forecast_period, step):
+        window_end_idx = idx + lookback_period
+        forecast_period_end = window_end_idx + forecast_period
+
+        # Extract the data window and transpose to (lookback_period, num_features)
+        data_window = data[:, idx:window_end_idx].T
+
+        motif_indexes_in_window = []  # Stores motif indices for the lookback window
+        forecast_distances = []       # Stores forecast distances for each motif
+
+        valid_instance = False
+
+        # for each motif, check if it is in the lookback window and forecast period
+        for motif_indexes in motif_indexes_list:
+            # Motif indexes in the lookback period (relative to the start of the window)
+            motif_in_lookback = sorted([motif_idx - idx for motif_idx in motif_indexes if idx <= motif_idx < window_end_idx])
+
+            # Motif indexes in the forecast period
+            motif_in_forecast = sorted([motif_idx for motif_idx in motif_indexes if window_end_idx <= motif_idx < forecast_period_end])
+
+            #if motif has index in the lookback window and forecast period
+            if motif_in_lookback and motif_in_forecast:
+                # Compute distance to the nearest motif in the forecast period
+                motif_indexes_in_window.append(motif_in_lookback)
+                forecast_distances.append(min(motif_in_forecast) - window_end_idx)
+                valid_instance = True
+            else:
+                continue # ignore motifs that are not in the lookback window and forecast period
+        
+        if not valid_instance:
+            continue  # Skip instances without any motifs in the forecast period
+
+        # Append to the dataset
+        for i in range(len(motif_indexes_in_window)):
+            X1.append(torch.tensor(data_window, dtype=torch.float32))
+            X2.append(motif_indexes_in_window[i])
+            y.append(torch.tensor(forecast_distances[i], dtype=torch.float32))
+
+    # Stack the results
+    X1 = torch.stack(X1)  # Shape: (num_samples, lookback_period, num_features)
+    X2_padded = pad_sequence([torch.tensor(motif_indexes, dtype=torch.float32) for motif_indexes in X2], batch_first=True, padding_value=-1).unsqueeze(-1)  # Shape: (num_samples, max_num_motifs, max_num_repetitions)
+    y = torch.stack(y)  # Shape: (num_samples, n)
+
+    return X1, X2_padded, y
+
+
+
 def print_study_results(study):
     print("Number of finished trials: ", len(study.trials))
     print("Best trial:", study.best_trial.number)

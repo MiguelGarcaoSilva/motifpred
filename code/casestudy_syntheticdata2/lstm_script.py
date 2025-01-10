@@ -267,7 +267,7 @@ model_params_keys = ["hidden_sizes_list"]
 model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(model_results_dir, exist_ok=True)  
 
-X_indices = {"X_indices": X_indices}
+X = {"X_indices": X_indices}
 run_optuna_study(pipeline.run_cross_val, LSTM, model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
