@@ -14,6 +14,8 @@ TOP_K_MP = 1
 INCLUDE = None
 NORMALIZE = True
 SUBSQUENCES_LENGTHS = [4,6,12]
+NORMALIZE_FLAGS = {"X_series": True, "X_mask": False, "X_indices": True}
+
 
 # Derived directories
 RESULTS_DIR = BASE_DIR / 'results' / CASE_STUDY 
