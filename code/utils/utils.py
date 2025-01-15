@@ -52,7 +52,6 @@ def create_dataset(data, lookback_period, step, forecast_period, motif_indexes):
     return X1, X2_padded, y
 
 
-
 def create_multi_motif_dataset(data, lookback_period, step, forecast_period, motif_indexes_list, motif_sizes_list):
     X1, X2, mask, y = [], [], [], []
 
