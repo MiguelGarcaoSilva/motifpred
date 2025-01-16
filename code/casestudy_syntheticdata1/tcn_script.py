@@ -129,7 +129,7 @@ model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{
 os.makedirs(model_results_dir, exist_ok=True)
 
 X = {"X_series": X_series}
-run_optuna_study(pipeline.run_cross_val, TemporalConvNet, model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+#run_optuna_study(pipeline.run_cross_val, TemporalConvNet, model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
 print_study_results(study)
@@ -177,6 +177,53 @@ model_params_keys = ["kernel_size", "num_channels_list", "dropout"]
 model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
 os.makedirs(model_results_dir, exist_ok=True)
 X = {"X_series": X_series, "X_mask": X_mask}
+#run_optuna_study(pipeline.run_cross_val, TemporalConvNet, model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+
+study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
+print_study_results(study)
+plot_best_model_results(
+    study.trials_dataframe(),
+    save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_losses.png")
+)
+
+# %%
+from models.tcn_pytorch import TemporalConvNet
+from utils.utils import print_study_results, plot_best_model_results
+
+n_trials = 100
+num_epochs = 500
+model_type = "TCN"
+model_name = "TCNSeries_X2Masking"
+
+suggestion_dict = {
+    "learning_rate": {
+        "type": "float",
+        "args": [1e-5, 1e-3],
+        "kwargs": {"log": True}
+    },
+    "kernel_size": { # ensure receptive field is at least as large as sequence length (lookback_period)
+        "type": "categorical",
+        "args": [[3, 5 ,7]]
+    },
+    "receptive_field": {
+        "type": "categorical",
+        "args": [[10]]
+    },
+    "dropout": {
+        "type": "float",
+        "args": [0.0, 0.5]
+    },
+    "batch_size": {
+        "type": "categorical",
+        "args": [[16, 32, 64, 128]]
+    }
+}
+
+model_params_keys = ["kernel_size", "num_channels_list", "dropout"]
+
+model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs")
+os.makedirs(model_results_dir, exist_ok=True)
+X = {"X_indices": X_indices}
 run_optuna_study(pipeline.run_cross_val, TemporalConvNet, model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
 study = joblib.load(os.path.join(model_results_dir, "study.pkl"))

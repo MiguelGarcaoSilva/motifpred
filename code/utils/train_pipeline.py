@@ -295,18 +295,24 @@ class ModelTrainingPipeline:
             # Flatten the data and apply the mask to select unmasked values
             unmasked_values = X[mask].view(-1, 1).numpy()
             # Scale only the unmasked values
-            scaled_values = scaler.fit_transform(unmasked_values)
+            scaled_values = scaler.transform(unmasked_values)
             # Create a copy of the original data and replace unmasked values with scaled values
             scaled_X = X.clone()
             scaled_X[mask] = torch.tensor(scaled_values.flatten(), dtype=torch.float32)
             return scaled_X
 
         scaler = MinMaxScaler(feature_range=(0, 1))
+        train_mask = X_train != -1
+        train_values = X_train[train_mask].view(-1, 1).numpy()
+        scaler.fit(train_values)
         X_train = scale_subset(X_train, scaler)
         X_val = scale_subset(X_val, scaler)
         X_test = scale_subset(X_test, scaler)
         
         return X_train, X_val, X_test
+    
+
+
 
     @staticmethod
     def set_seed(seed):
