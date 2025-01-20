@@ -189,7 +189,11 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
             model = model_class(input_channels=input_channels, sequence_length=X_train.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'TCN':
             input_channels = input_dim
+            num_blocks = len([key for key in best_config.keys() if 'block_channels_' in key])
+            model_hyperparams["num_channels_list"] = [best_config[f"block_channels_{layer}"] for layer in range(num_blocks)]
             model = model_class(input_channels=input_channels, output_dim=1, **model_hyperparams).to(pipeline.device)
+        elif model_type == 'Transformer':
+            model = model_class(input_dim=input_dim, sequence_length=X_train.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'Baseline':
             model = model_class().to(pipeline.device)
 
