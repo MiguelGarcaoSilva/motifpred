@@ -65,11 +65,10 @@ def extract_hyperparameters(trial, suggestion_dict, model_type=None):
 
     # Handle TCN-specific logic
     elif model_type == "TCN":
-        kernel_size = hyperparameters.pop("kernel_size", None)
+        kernel_size = hyperparameters.get("kernel_size", None)
         receptive_field = hyperparameters.pop("receptive_field", None) 
         #get min num of blocks for receptive field
         num_blocks = math.ceil(math.log2((receptive_field - 1) / (kernel_size - 1) + 1))
-
         num_channels_to_sample = suggestion_dict.get("num_channels_to_sample", {}).get("args", [16, 32])
         hyperparameters["num_channels_list"] = [
             trial.suggest_categorical(f"block_channels_{i}", num_channels_to_sample)
@@ -460,6 +459,7 @@ class ModelTrainingPipeline:
     def run_cross_val(self, trial, seed, results_folder, model_class, model_type, X, y, normalize_flags,
                         criterion=torch.nn.MSELoss(), num_epochs=500, hyperparams=None, model_params_keys=None):
             self.set_seed(seed)
+
             fold_results, best_epochs, test_losses, test_mae_per_fold, test_rmse_per_fold = [], [], [], [], []
 
             #get X from X dictionary, if doesnt exist, set to None
