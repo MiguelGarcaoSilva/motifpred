@@ -71,19 +71,38 @@ def create_multi_motif_dataset(data, lookback_period, step, forecast_period, mot
         # for each motif, check if it is in the lookback window and forecast period
         for motif_indexes, motif_size in zip(motif_indexes_list, motif_sizes_list):
             # Motif indexes in the lookback period (relative to the start of the window)
-            motif_in_lookback = sorted([int(motif_idx) - idx for motif_idx in motif_indexes if idx <= motif_idx < window_end_idx])
+            motif_in_mask = sorted([
+                int(motif_idx) - idx
+                for motif_idx in motif_indexes
+                if (motif_idx + motif_size > idx and motif_idx < window_end_idx)
+            ])
+
+            # Motif indexes for X_indices (only motifs fully starting within the window)
+            motif_in_lookback = sorted([
+                int(motif_idx) - idx
+                for motif_idx in motif_indexes
+                if idx <= motif_idx < window_end_idx
+            ])          
             # Motif indexes in the forecast period
-            motif_in_forecast = sorted([int(motif_idx) for motif_idx in motif_indexes if window_end_idx <= motif_idx < forecast_period_end])
-            # if motif has index in the lookback window and forecast period
-            if motif_in_lookback and motif_in_forecast:
-                # Compute distance to the nearest motif in the forecast period
-                motif_indexes_in_window.append(motif_in_lookback)
-                forecast_distances.append(min(motif_in_forecast) - window_end_idx)
+            motif_in_forecast = sorted([
+                int(motif_idx)
+                for motif_idx in motif_indexes
+                if window_end_idx <= motif_idx < forecast_period_end
+            ])           
+             # if motif has index in the lookback window and forecast period
+            if len(motif_in_lookback) >= 2 and motif_in_forecast:
                 valid_instance = True
 
+                # Compute distance to the nearest motif  in the forecast period
+                motif_indexes_in_window.append(motif_in_lookback)
+                forecast_distances.append(min(motif_in_forecast) - window_end_idx + 1)
+
                 # Update the mask for the motifs in the lookback window
-                for motif_start in motif_in_lookback:
-                    mask_window[motif_start:motif_start + motif_size] = 1
+                for motif_start in motif_in_mask:
+                    motif_end = motif_start + motif_size
+                    if motif_start < lookback_period and motif_end > 0:
+                        mask_window[max(0, motif_start):min(lookback_period, motif_end)] = 1
+                    
             else:
                 continue  # ignore motifs that are not in the lookback window and forecast period
         

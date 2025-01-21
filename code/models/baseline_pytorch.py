@@ -36,7 +36,8 @@ class BaselineAverageModel(nn.Module):
                 last_index = valid_values[-1]
                 next_prediction = last_index + avg_difference
                 time_to_next_repetition = next_prediction - self.n_timepoints
-                time_to_next_repetition = 0 if time_to_next_repetition < 0 else time_to_next_repetition
+                # default when time_to_next_repetition is before end of lookpack period
+                time_to_next_repetition = 1 if time_to_next_repetition < 1 else time_to_next_repetition
                 batch_predictions.append(time_to_next_repetition)
 
         return torch.tensor(batch_predictions, device=device).unsqueeze(1)  # Return as (batch_size, 1)
@@ -82,8 +83,9 @@ class Baseline_NaiveLastDifference(nn.Module):
 
                 last_index = valid_values[-1]  # Last index in the sequence
                 next_prediction = last_index + last_difference  # Next index prediction
+                # Ensure the next prediction is after the end of the window
                 time_to_next_repetition = next_prediction - self.n_timepoints 
-                time_to_next_repetition = 0 if time_to_next_repetition < 0 else time_to_next_repetition
+                time_to_next_repetition = 1 if time_to_next_repetition < 1 else time_to_next_repetition
                 batch_predictions.append(time_to_next_repetition)
 
         return torch.tensor(batch_predictions, device=indexes.device).unsqueeze(1)  # Return as (batch_size, 1)
