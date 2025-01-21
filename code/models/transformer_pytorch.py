@@ -23,7 +23,7 @@ class TimeSeriesTransformer(nn.Module):
         n_heads,
         e_layers,
         dim_feedforward,
-        dropout=0.1,
+        dropout,
         output_dim = 1
     ):
         super(TimeSeriesTransformer, self).__init__()

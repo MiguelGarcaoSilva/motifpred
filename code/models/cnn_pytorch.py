@@ -3,8 +3,8 @@ from torch import nn
 import torch.nn.functional as F
 
 class CNN(nn.Module):
-    def __init__(self, input_channels, sequence_length, output_dim, 
-                 num_filters_list, kernel_size, pool_size=None):
+    def __init__(self, input_channels, sequence_length,
+                 num_filters_list, kernel_size, pool_size, output_dim):
         """
         Unified CNN model with optional mask input.
 

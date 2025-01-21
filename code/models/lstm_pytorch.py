@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 class LSTM(nn.Module):
-    def __init__(self, input_dim, hidden_sizes_list, output_dim):
+    def __init__(self, input_dim, hidden_sizes_list, output_dim=1):
         """
         Unified LSTM model that can optionally process auxiliary inputs (e.g., masks).
 

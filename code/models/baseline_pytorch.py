@@ -2,19 +2,19 @@ import torch
 from torch import nn
 
 class BaselineAverageModel(nn.Module):
-    def __init__(self):
+    def __init__(self, n_timepoints):
         """
         Initialize the baseline model.
         """
         super(BaselineAverageModel, self).__init__()
+        self.n_timepoints = n_timepoints
 
-    def forward(self, X, mask, indexes):
+    def forward(self, indexes):
         """
         Forward pass: predict the timepoints needed for a new repetition after X ends.
 
         Args:
         - X (Tensor): Input tensor, size (batch_size, window_len, feature_dim).
-        - mask (Tensor): Optional mask tensor, size (batch_size, window_len).
         - indexes (Tensor): Input tensor, size (batch_size, window_len, 1).
 
         Returns:
@@ -33,12 +33,9 @@ class BaselineAverageModel(nn.Module):
                 differences = valid_values[1:] - valid_values[:-1]  # Consecutive differences
                 avg_difference = torch.mean(differences)  # Average interval
 
-
-                x_length = X.size(1)  # Length of X (timepoints)
-
                 last_index = valid_values[-1]
                 next_prediction = last_index + avg_difference
-                time_to_next_repetition = next_prediction - x_length
+                time_to_next_repetition = next_prediction - self.n_timepoints
                 time_to_next_repetition = 0 if time_to_next_repetition < 0 else time_to_next_repetition
                 batch_predictions.append(time_to_next_repetition)
 
@@ -51,21 +48,21 @@ class BaselineAverageModel(nn.Module):
         
 
 class Baseline_NaiveLastDifference(nn.Module):
-    def __init__(self):
+    def __init__(self, n_timepoints):
         """
         Initialize the baseline model.
 
         """
         super(Baseline_NaiveLastDifference, self).__init__()
+        self.n_timepoints = n_timepoints
 
 
-    def forward(self, X, mask, indexes):
+    def forward(self, indexes):
         """
         Forward pass: predict the timepoints needed for a new repetition after X ends.
 
         Args:
         - X (Tensor): Input tensor, size (batch_size, window_len, feature_dim).
-        - mask (Tensor): Optional mask tensor, size (batch_size, window_len).
         - indexes (Tensor): Input tensor, size (batch_size, window_len, 1).
 
         Returns:
@@ -82,11 +79,10 @@ class Baseline_NaiveLastDifference(nn.Module):
             else:
                 # Use the last difference as the interval
                 last_difference = valid_values[-1] - valid_values[-2]
-                x_length = X.size(1)  # Length of X (timepoints)
 
                 last_index = valid_values[-1]  # Last index in the sequence
                 next_prediction = last_index + last_difference  # Next index prediction
-                time_to_next_repetition = next_prediction - x_length 
+                time_to_next_repetition = next_prediction - self.n_timepoints 
                 time_to_next_repetition = 0 if time_to_next_repetition < 0 else time_to_next_repetition
                 batch_predictions.append(time_to_next_repetition)
 

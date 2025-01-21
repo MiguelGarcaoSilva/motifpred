@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 class FFNN(nn.Module):
-    def __init__(self, input_dim, hidden_sizes_list, output_dim):
+    def __init__(self, input_dim, hidden_sizes_list, output_dim=1):
         super(FFNN, self).__init__()
 
         # Define layers

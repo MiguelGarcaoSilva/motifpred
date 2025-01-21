@@ -194,7 +194,7 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
         elif model_type == 'Transformer':
             model = model_class(input_dim=input_dim, sequence_length=X_train.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
         elif model_type == 'Baseline':
-            model = model_class().to(pipeline.device)
+            model = model_class(n_timepoints = input_dim).to(pipeline.device)
 
         if model_type == 'Baseline':
             fold_val_loss, model, best_epoch, train_losses, validation_losses = float('inf'), model, 0, [], []
@@ -365,6 +365,10 @@ class ModelTrainingPipeline:
                 raise ValueError("To implement.")
 
             input_dim = X.size(2)
+
+        elif model_type in {"Baseline"}:
+            X = indices
+            input_dim = series.size(1)
 
         return X , input_dim
 
@@ -538,7 +542,7 @@ class ModelTrainingPipeline:
                     model = model_class(enc_in=input_dim, dec_in=input_dim, c_out=1,  seq_len=X_train.shape[1], 
                                         label_len=int(X_train.shape[1] // 2), **model_hyperparams,  out_len=1, device=self.device).to(self.device)
                 elif model_type == 'Baseline':
-                    model = model_class().to(self.device)
+                    model = model_class(n_timepoints = input_dim).to(self.device)
 
                 if model_type == 'Baseline':  # Skip training for the baseline model
                     fold_val_loss, model, best_epoch, train_losses, validation_losses = float('inf'), model, 0, [], []
