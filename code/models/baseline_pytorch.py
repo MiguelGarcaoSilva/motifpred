@@ -1,12 +1,12 @@
 import torch
 from torch import nn
 
-class BaselineAverageModel(nn.Module):
+class BaselineAverage(nn.Module):
     def __init__(self, n_timepoints):
         """
         Initialize the baseline model.
         """
-        super(BaselineAverageModel, self).__init__()
+        super(BaselineAverage, self).__init__()
         self.n_timepoints = n_timepoints
 
     def forward(self, indexes):
@@ -48,13 +48,13 @@ class BaselineAverageModel(nn.Module):
 
         
 
-class Baseline_NaiveLastDifference(nn.Module):
+class BaselineLastDifference(nn.Module):
     def __init__(self, n_timepoints):
         """
         Initialize the baseline model.
 
         """
-        super(Baseline_NaiveLastDifference, self).__init__()
+        super(BaselineLastDifference, self).__init__()
         self.n_timepoints = n_timepoints
 
 

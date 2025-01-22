@@ -116,7 +116,7 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
     print("Best hyperparameters:", best_config)
 
     # Initialize lists to store results
-    epochs_train_losses, epochs_val_losses, val_losses, test_losses, all_predictions, all_true_values = [], [], [], [], [], []
+    epochs_train_losses, epochs_val_losses, val_losses, test_losses, test_mae_per_fold, test_rmse_per_fold, all_predictions, all_true_values = [], [], [], [], [], [], [], []
 
     # Extract input data from the dictionary, with None defaults
     X_series, X_mask, X_indices = X.get('X_series'), X.get('X_mask'), X.get('X_indices')
@@ -213,7 +213,11 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
         test_loss, fold_predictions, fold_true_values = pipeline.evaluate_test_set(
             model, test_loader, criterion=torch.nn.MSELoss()
         )
+
         test_losses.append(test_loss)
+        mae, rmse = pipeline.evaluate_metrics(fold_predictions, fold_true_values)
+        test_mae_per_fold.append(mae)
+        test_rmse_per_fold.append(rmse)
         all_predictions.append(fold_predictions.cpu().numpy())
         all_true_values.append(fold_true_values.cpu().numpy())
 
@@ -222,8 +226,9 @@ def get_preds_best_config(study, pipeline, model_class, model_type, model_params
     print("Mean validation loss:", np.mean(val_losses))
     print("Test Losses:", test_losses)
     print("Mean test loss:", np.mean(test_losses))
-
-    return epochs_train_losses, epochs_val_losses, all_predictions, all_true_values
+    print("Test MAE:", test_mae_per_fold)
+    
+    return epochs_train_losses, epochs_val_losses, val_losses, test_losses, test_mae_per_fold, test_rmse_per_fold, all_predictions, all_true_values
 
 
 
@@ -579,8 +584,10 @@ class ModelTrainingPipeline:
             trial.set_user_attr("mean_val_loss", mean_val_loss)
             trial.set_user_attr("test_losses", test_losses)
             trial.set_user_attr("mean_test_loss", mean_test_loss)
+            trial.set_user_attr("test_mae_per_fold", test_mae_per_fold)
             trial.set_user_attr("mean_test_mae", mean_test_mae)
             trial.set_user_attr("std_test_mae", std_test_mae)
+            trial.set_user_attr("test_rmse_per_fold", test_rmse_per_fold)
             trial.set_user_attr("mean_test_rmse", mean_test_rmse)
             trial.set_user_attr("std_test_rmse", std_test_rmse)
 

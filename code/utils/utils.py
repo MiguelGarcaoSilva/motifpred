@@ -71,14 +71,15 @@ def create_multi_motif_dataset(data, lookback_period, step, forecast_period, mot
         # for each motif, check if it is in the lookback window and forecast period
         for motif_indexes, motif_size in zip(motif_indexes_list, motif_sizes_list):
             mask_window = torch.zeros(lookback_period, dtype=torch.float32)  # Initialize mask with zeros
-
-            print(motif_indexes)
+            motif_indexes = sorted(motif_indexes)  
+            print("working on motif_indexes", motif_indexes)   
             # Motif indexes in the lookback period (relative to the start of the window)
             motif_in_mask = sorted([
                 int(motif_idx) - idx
                 for motif_idx in motif_indexes
                 if (motif_idx + motif_size > idx and motif_idx < window_end_idx)
             ])
+            print("lookback period start:", idx, "window_end_idx:", window_end_idx)
 
             # Motif indexes for X_indices (only motifs fully starting within the window)
             motif_in_lookback = sorted([
@@ -86,21 +87,22 @@ def create_multi_motif_dataset(data, lookback_period, step, forecast_period, mot
                 for motif_idx in motif_indexes
                 if idx <= motif_idx < window_end_idx
             ])
-            print(motif_in_lookback)          
+            print("motif_in_lookback", motif_in_lookback)
             # Motif indexes in the forecast period
             motif_in_forecast = sorted([
                 int(motif_idx)
                 for motif_idx in motif_indexes
                 if window_end_idx <= motif_idx < forecast_period_end
-            ])           
+            ])
+            print("motif_in_forecast", motif_in_forecast)           
              # if motif has index in the lookback window and forecast period
-            if len(motif_in_lookback) >= 2 and motif_in_forecast:
-                print("entrou")
+            if len(motif_in_lookback) >= 2 and len(motif_in_forecast) >= 1 :
                 valid_instance = True
 
                 # Compute distance to the nearest motif  in the forecast period
                 motif_indexes_in_window.append(motif_in_lookback)
                 forecast_distances.append(min(motif_in_forecast) - window_end_idx + 1)
+                print("forecast_distance", min(motif_in_forecast) - window_end_idx + 1)
 
                 # Update the mask for the motifs in the lookback window
                 for motif_start in motif_in_mask:
@@ -110,6 +112,7 @@ def create_multi_motif_dataset(data, lookback_period, step, forecast_period, mot
                 mask_windows.append(mask_window)
                     
             else:
+                print("skipped")
                 continue  # ignore motifs that are not in the lookback window and forecast period
         
         if not valid_instance:
@@ -140,10 +143,18 @@ def print_study_results(study):
     print("Mean validation loss:", round(study.best_trial.user_attrs["mean_val_loss"], 3))
     print("Test Losses:", [round(loss, 3) for loss in study.best_trial.user_attrs["test_losses"]])
     print("Mean test loss:", round(study.best_trial.user_attrs["mean_test_loss"], 3))
+    #print("Test MAE:", [round(mae, 3) for mae in study.best_trial.user_attrs["test_mae_per_fold"]])
     print("Mean test MAE:", round(study.best_trial.user_attrs["mean_test_mae"], 3), 
           "std:", round(study.best_trial.user_attrs["std_test_mae"], 3))
+    #print("Test RMSE:", [round(rmse, 3) for rmse in study.best_trial.user_attrs["test_rmse_per_fold"]])
     print("Mean test RMSE:", round(study.best_trial.user_attrs["mean_test_rmse"], 3), 
           "std:", round(study.best_trial.user_attrs["std_test_rmse"], 3))
+
+def get_best_model_results(study):
+    best_trial = study.best_trial
+    fold_val_losses = best_trial.user_attrs["fold_val_losses"]
+    fold_test_losses = best_trial.user_attrs["test_losses"]
+    return fold_val_losses, fold_test_losses
 
 
 def plot_best_model_results(study_df, save_path=None):
