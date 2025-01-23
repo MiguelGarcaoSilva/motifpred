@@ -7,13 +7,13 @@ BASE_DIR = Path('../../').resolve()
 CASE_STUDY = 'populationdensity'
 DATASET = 'hourly_township'
 TOWNSHIP_NAME = "Avenidas Novas"
-VARIABLES = ["sum_terminals", "sum_roaming_terminals", "sum_phonecalls"]
+VARIABLES = ["sum_terminals"]
 
 STUMPY_EXCL_ZONE_DENOM = 2  # r = np.ceil(m/2)
 TOP_K_MP = 1
 INCLUDE = None
 NORMALIZE = True
-SUBSQUENCES_LENGTHS = [4,6,12]
+SUBSQUENCES_LENGTHS = [4]
 NORMALIZE_FLAGS = {"X_series": True, "X_mask": False, "X_indices": True}
 
 
