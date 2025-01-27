@@ -13,7 +13,7 @@ STUMPY_EXCL_ZONE_DENOM = 2  # r = np.ceil(m/2)
 TOP_K_MP = 1
 INCLUDE = None
 NORMALIZE = True
-SUBSQUENCES_LENGTHS = [4]
+SUBSQUENCES_LENGTHS = [4, 6]
 NORMALIZE_FLAGS = {"X_series": True, "X_mask": False, "X_indices": True}
 
 

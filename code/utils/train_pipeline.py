@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 from sklearn.preprocessing import MinMaxScaler
-from utils.timeseries_split import BlockingTimeSeriesSplit
+from utils.timeseries_split import BlockingTimeSeriesSplit, TrainValTestSplit
 import numpy as np
 import os
 import random
@@ -106,6 +106,131 @@ def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, m
     study_df.to_csv(os.path.join(results_folder, "study_results.csv"), index=False)
 
     print("Best hyperparameters:", study.best_params)
+
+
+def get_preds_best_config_train_val_test(study, pipeline, model_class, model_type, model_params_keys, num_epochs, seed, X, y, normalize_flags):
+    pipeline.set_seed(seed)
+
+    # Retrieve the best configuration from the Optuna study
+    best_config = study.best_params
+    print("Best hyperparameters:", best_config)
+
+    # Initialize lists to store results
+    epochs_train_losses, epochs_val_losses, val_losses, test_losses, test_mae, test_rmse, all_predictions, all_true_values = [], [], [], [], [], [], [], []
+
+    # Extract input data from the dictionary, with None defaults
+    X_series, X_mask, X_indices = X.get('X_series'), X.get('X_mask'), X.get('X_indices')
+    
+    # Initialize the splitter
+    splitter = TrainValTestSplit(val_size=0.1, test_size=0.1)
+
+    # Split data into train, val, and test sets
+    if X_series is not None:
+        train_indices, val_indices, test_indices = splitter.split(X_series)
+        X_train, X_val, X_test = X_series[train_indices], X_series[val_indices], X_series[test_indices]
+        y_train, y_val, y_test = y[train_indices], y[val_indices], y[test_indices]
+    elif X_indices is not None:
+        train_indices, val_indices, test_indices = splitter.split(X_indices)
+        X_train, X_val, X_test = X_indices[train_indices], X_indices[val_indices], X_indices[test_indices]
+        y_train, y_val, y_test = y[train_indices], y[val_indices], y[test_indices]
+    else:
+        raise ValueError("No valid input data found in X dictionary.")
+
+    # Process each input based on normalization flags
+    X1_train = X1_val = X1_test = None
+    X2_train = X2_val = X2_test = None
+    X3_train = X3_val = X3_test = None
+
+    if X_series is not None and X_mask is None and X_indices is None:
+        if normalize_flags['X_series']:
+            X1_train, X1_val, X1_test = pipeline.scale_data(X_train, X_val, X_test)
+    elif X_series is not None and X_mask is not None and X_indices is None:
+        X1_train, X1_val, X1_test = X_train, X_val, X_test
+        X2_train, X2_val, X2_test = X_mask[train_indices], X_mask[val_indices], X_mask[test_indices]
+        if normalize_flags['X_series']:
+            X1_train, X1_val, X1_test = pipeline.scale_data(X1_train, X1_val, X1_test)
+        if normalize_flags['X_mask']:
+            raise ValueError("Masking should not be normalized.")
+    elif X_series is None and X_mask is None and X_indices is not None:
+        X3_train, X3_val, X3_test = X_train, X_val, X_test
+        if normalize_flags['X_indices']:
+            X3_train, X3_val, X3_test = pipeline.scale_data(X3_train, X3_val, X3_test)
+    elif X_series is not None and X_mask is not None and X_indices is not None:
+        X1_train, X1_val, X1_test = X_train, X_val, X_test
+        X2_train, X2_val, X2_test = X_mask[train_indices], X_mask[val_indices], X_mask[test_indices]
+        X3_train, X3_val, X3_test = X_indices[train_indices], X_indices[val_indices], X_indices[test_indices]
+        if normalize_flags['X_series']:
+            X1_train, X1_val, X1_test = pipeline.scale_data(X1_train, X1_val, X1_test)
+        if normalize_flags['X_mask']:
+            raise ValueError("Masking should not be normalized.")
+        if normalize_flags['X_indices']:
+            X3_train, X3_val, X3_test = pipeline.scale_data(X3_train, X3_val, X3_test)
+
+    # Prepare DataLoaders
+    X_train, input_dim = pipeline.prepare_input_data(model_type, series=X1_train, mask=X2_train, indices=X3_train)
+    X_val, _ = pipeline.prepare_input_data(model_type, series=X1_val, mask=X2_val, indices=X3_val)
+    X_test, _ = pipeline.prepare_input_data(model_type, series=X1_test, mask=X2_test, indices=X3_test)
+    train_loader, val_loader, test_loader = pipeline.prepare_dataloaders(
+        X_train, X_val, X_test,
+        y_train=y_train, y_val=y_val, y_test=y_test,
+        batch_size=best_config['batch_size']
+    )
+
+    # Initialize model
+    model_hyperparams = {k: v for k, v in best_config.items() if k in model_params_keys}
+
+    if model_type == 'FFNN':
+        model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
+        model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(pipeline.device)
+    elif model_type == 'LSTM':
+        model_hyperparams["hidden_sizes_list"] = [best_config[f"hidden_size_layer_{layer}"] for layer in range(best_config["num_layers"])] 
+        model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(pipeline.device)
+    elif model_type == 'CNN':
+        input_channels = input_dim
+        model_hyperparams["num_filters_list"] = [best_config[f"num_filters_layer_{layer}"] for layer in range(best_config["num_layers"])]
+        model = model_class(input_channels=input_channels, sequence_length=X_train.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
+    elif model_type == 'TCN':
+        input_channels = input_dim
+        num_blocks = len([key for key in best_config.keys() if 'block_channels_' in key])
+        model_hyperparams["num_channels_list"] = [best_config[f"block_channels_{layer}"] for layer in range(num_blocks)]
+        model = model_class(input_channels=input_channels, output_dim=1, **model_hyperparams).to(pipeline.device)
+    elif model_type == 'Transformer':
+        model = model_class(input_dim=input_dim, sequence_length=X_train.shape[1], output_dim=1, **model_hyperparams).to(pipeline.device)
+    elif model_type == 'Baseline':
+        model = model_class(n_timepoints=input_dim).to(pipeline.device)
+
+    if model_type == 'Baseline':
+        val_loss, model, best_epoch, train_losses, validation_losses = float('inf'), model, 0, [], []
+    else:
+        val_loss, model, best_epoch, train_losses, validation_losses = pipeline.train_model(
+            model, criterion=torch.nn.MSELoss(), optimizer=torch.optim.Adam(model.parameters(), lr=best_config['learning_rate']),
+            train_loader=train_loader, val_loader=val_loader, num_epochs=num_epochs
+        )
+
+    # Store training and validation losses
+    epochs_train_losses = train_losses
+    epochs_val_losses = validation_losses
+    val_losses = val_loss
+
+    # Evaluate the model on the test set
+    test_loss, test_predictions, test_true_values = pipeline.evaluate_test_set(
+        model, test_loader, criterion=torch.nn.MSELoss()
+    )
+
+    test_losses = test_loss
+    mae, rmse = pipeline.evaluate_metrics(test_predictions, test_true_values)
+    test_mae = mae
+    test_rmse = rmse
+    all_predictions = test_predictions.cpu().numpy()
+    all_true_values = test_true_values.cpu().numpy()
+
+    # Output validation and test losses
+    print("Validation Loss:", val_loss)
+    print("Test Loss:", test_loss)
+    print("Test MAE:", test_mae)
+    print("Test RMSE:", test_rmse)
+    
+    return epochs_train_losses, epochs_val_losses, val_losses, test_losses, test_mae, test_rmse, all_predictions, all_true_values
 
 
 def get_preds_best_config(study, pipeline, model_class, model_type, model_params_keys, num_epochs, seed, X, y, normalize_flags):
@@ -436,6 +561,7 @@ class ModelTrainingPipeline:
 
         if best_model_state:
             model.load_state_dict(best_model_state)
+
         return best_val_loss, model, best_epoch, train_losses, validation_losses
 
 
@@ -580,6 +706,7 @@ class ModelTrainingPipeline:
             mean_test_rmse, std_test_rmse = np.mean(test_rmse_per_fold), np.std(test_rmse_per_fold)
 
             # Log metrics to Optuna
+            trial.set_user_attr("best_epochs", best_epochs)
             trial.set_user_attr("fold_val_losses", fold_results)
             trial.set_user_attr("mean_val_loss", mean_val_loss)
             trial.set_user_attr("test_losses", test_losses)
@@ -592,3 +719,107 @@ class ModelTrainingPipeline:
             trial.set_user_attr("std_test_rmse", std_test_rmse)
 
             return mean_val_loss, mean_test_loss, model
+
+    def run_train_val_test(self, trial, seed, results_folder, model_class, model_type, X, y, normalize_flags,
+                        criterion=torch.nn.MSELoss(), num_epochs=500, hyperparams=None, model_params_keys=None):
+        """
+        Runs a single train-val-test split.
+        """
+        self.set_seed(seed)
+
+        # Get X from X dictionary, if it doesn't exist, set to None
+        X_series, X_mask, X_indices = X.get('X_series'), X.get('X_mask'), X.get('X_indices')
+        
+        splitter = TrainValTestSplit(val_size=0.1, test_size=0.1)
+
+        # Split data into train, val, and test sets
+        if X_series is not None:
+            train_indices, val_indices, test_indices = splitter.split(X_series)
+            X_train, X_val, X_test = X_series[train_indices], X_series[val_indices], X_series[test_indices]
+            y_train, y_val, y_test = y[train_indices], y[val_indices], y[test_indices]
+        elif X_indices is not None:
+            train_indices, val_indices, test_indices = splitter.split(X_indices)
+            X_train, X_val, X_test = X_indices[train_indices], X_indices[val_indices], X_indices[test_indices]
+            y_train, y_val, y_test = y[train_indices], y[val_indices], y[test_indices]
+        else:
+            raise ValueError("No valid input data found in X dictionary.")
+
+        # Process each input based on normalization flags
+        X1_train = X1_val = X1_test = None
+        X2_train = X2_val = X2_test = None
+        X3_train = X3_val = X3_test = None
+
+        if X_series is not None and X_mask is None and X_indices is None:
+            if normalize_flags['X_series']:
+                X1_train, X1_val, X1_test = self.scale_data(X_train, X_val, X_test)
+        elif X_series is not None and X_mask is not None and X_indices is None:
+            X1_train, X1_val, X1_test = X_train, X_val, X_test
+            X2_train, X2_val, X2_test = X_mask[train_indices], X_mask[val_indices], X_mask[test_indices]
+            if normalize_flags['X_series']:
+                X1_train, X1_val, X1_test = self.scale_data(X1_train, X1_val, X1_test)
+            if normalize_flags['X_mask']:
+                raise ValueError("Masking should not be normalized.")
+        elif X_series is None and X_mask is None and X_indices is not None:
+            X3_train, X3_val, X3_test = X_train, X_val, X_test
+            if normalize_flags['X_indices']:
+                X3_train, X3_val, X3_test = self.scale_data(X3_train, X3_val, X3_test)
+        elif X_series is not None and X_mask is not None and X_indices is not None:
+            X1_train, X1_val, X1_test = X_train, X_val, X_test
+            X2_train, X2_val, X2_test = X_mask[train_indices], X_mask[val_indices], X_mask[test_indices]
+            X3_train, X3_val, X3_test = X_indices[train_indices], X_indices[val_indices], X_indices[test_indices]
+            if normalize_flags['X_series']:
+                X1_train, X1_val, X1_test = self.scale_data(X1_train, X1_val, X1_test)
+            if normalize_flags['X_mask']:
+                raise ValueError("Masking should not be normalized.")
+            if normalize_flags['X_indices']:
+                X3_train, X3_val, X3_test = self.scale_data(X3_train, X3_val, X3_test)
+
+        # Prepare DataLoaders
+        X_train, input_dim = self.prepare_input_data(model_type, series=X1_train, mask=X2_train, indices=X3_train)
+        X_val, _ = self.prepare_input_data(model_type, series=X1_val, mask=X2_val, indices=X3_val)
+        X_test, _ = self.prepare_input_data(model_type, series=X1_test, mask=X2_test, indices=X3_test)
+        train_loader, val_loader, test_loader = self.prepare_dataloaders(
+            X_train, X_val, X_test,
+            y_train=y_train, y_val=y_val, y_test=y_test,
+            batch_size=hyperparams['batch_size']
+        )
+
+        # Initialize model
+        model_hyperparams = {k: v for k, v in hyperparams.items() if k in model_params_keys}
+        if model_type == 'FFNN':
+            model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(self.device)
+        elif model_type == 'LSTM':
+            model = model_class(input_dim=input_dim, **model_hyperparams, output_dim=1).to(self.device)
+        elif model_type == 'CNN':
+            input_channels = input_dim
+            model = model_class(input_channels=input_channels, sequence_length=X_train.shape[1], **model_hyperparams, output_dim=1).to(self.device)
+        elif model_type == 'TCN':
+            input_channels = input_dim
+            model = model_class(input_channels=input_channels, **model_hyperparams, output_dim=1).to(self.device)
+        elif model_type == 'Transformer':
+            model = model_class(input_dim=input_dim, sequence_length=X_train.shape[1], **model_hyperparams, output_dim=1).to(self.device)
+        elif model_type == 'Baseline':
+            model = model_class(n_timepoints=input_dim).to(self.device)
+
+        # Train the model
+        if model_type == 'Baseline':
+            val_loss, model, best_epoch, train_losses, validation_losses = float('inf'), model, 0, [], []
+        else:
+            val_loss, model, best_epoch, train_losses, validation_losses = self.train_model(
+                model, criterion, torch.optim.Adam(model.parameters(), lr=hyperparams['learning_rate']),
+                train_loader, val_loader, num_epochs
+            )
+
+        # Evaluate on the test set
+        test_loss, test_predictions, test_true_values = self.evaluate_test_set(model, test_loader, criterion)
+        mae, rmse = self.evaluate_metrics(test_predictions, test_true_values)
+
+        # Log results
+        trial.set_user_attr("train_losses", train_losses)
+        trial.set_user_attr("validation_losses", validation_losses)
+        trial.set_user_attr("best_epoch", best_epoch)
+        trial.set_user_attr("test_loss", test_loss)
+        trial.set_user_attr("test_mae", mae)
+        trial.set_user_attr("test_rmse", rmse)
+
+        return val_loss, test_loss, model

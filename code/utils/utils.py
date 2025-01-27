@@ -16,7 +16,7 @@ def create_dataset(data, lookback_period, step, forecast_period, motif_indexes):
         forecast_period_end = window_end_idx + forecast_period
 
         # If there are no more matches after the window, break
-        if not any([window_end_idx < motif_idx for motif_idx in motif_indexes]):
+        if not any(window_end_idx < motif_idx for motif_idx in motif_indexes):
             break
 
         # Motif indexes in window, relative to the start of the window
@@ -50,6 +50,59 @@ def create_dataset(data, lookback_period, step, forecast_period, motif_indexes):
     y = torch.tensor(y, dtype=torch.float32).unsqueeze(1) 
 
     return X1, X2_padded, y
+
+def create_motif_dataset(data, lookback_period, step, forecast_period, motif_indexes, motif_size):
+
+    X1, X2, mask, y = [], [], [], []  # X1: data, X2: indexes of the motifs, y: distance to the next motif
+
+    for idx in range(len(data[0]) - lookback_period - 1):
+        if idx % step != 0:
+            continue
+
+        window_end_idx = idx + lookback_period
+        forecast_period_end = window_end_idx + forecast_period
+
+        # If there are no more matches after the window, break
+        if not any(window_end_idx < motif_idx for motif_idx in motif_indexes):
+            break
+
+        # Motif indexes in window, relative to the start of the window
+        motif_indexes_in_window = [motif_idx - idx for motif_idx in motif_indexes if idx <= motif_idx <= window_end_idx]
+        motif_indexes_in_forecast_period = [motif_idx for motif_idx in motif_indexes if window_end_idx < motif_idx <= forecast_period_end]
+
+        if motif_indexes_in_forecast_period:
+            next_match_in_forecast_period = motif_indexes_in_forecast_period[0]
+        else:
+            continue  # No match in the forecast period but exists in the future
+
+        # Get the data window and transpose to (lookback_period, num_features)
+        data_window = data[:, idx:window_end_idx].T
+
+        #mask for the motif
+        motif_mask = torch.zeros(lookback_period, dtype=torch.float32)  # Initialize mask with zeros
+        motif_indexes_in_window = sorted(motif_indexes_in_window)
+        for motif_start in motif_indexes_in_window:
+            motif_end = motif_start + motif_size
+            if motif_start < lookback_period and motif_end > 0:
+                motif_mask[max(0, motif_start):min(lookback_period, motif_end)] = 1
+
+        # Index of the next match relative to the end of the window
+        data_y = next_match_in_forecast_period - window_end_idx
+        
+        # Append to lists
+        X1.append(torch.tensor(data_window, dtype=torch.float32))  # Now with shape (lookback_period, num_features)
+        X2.append(torch.tensor(motif_indexes_in_window, dtype=torch.float32))
+        mask.append(motif_mask)
+        y.append(data_y)
+
+    # Pad X2 sequences to have the same length
+    X2_padded = pad_sequence(X2, batch_first=True, padding_value=-1).unsqueeze(-1) # Final shape: (num_samples, max_num_motifs, 1)
+    # Convert lists to torch tensors
+    X1 = torch.stack(X1)  # Final shape: (num_samples, lookback_period, num_features)
+    mask = torch.stack(mask)
+    y = torch.tensor(y, dtype=torch.float32).unsqueeze(1)
+
+    return X1, X2_padded, mask, y
 
 
 def create_multi_motif_dataset(data, lookback_period, step, forecast_period, motif_indexes_list, motif_sizes_list):
@@ -144,6 +197,16 @@ def print_study_results(study):
     print("Mean test RMSE:", round(study.best_trial.user_attrs["mean_test_rmse"], 3), 
           "std:", round(study.best_trial.user_attrs["std_test_rmse"], 3))
 
+def get_best_model_results_traindevtest(study):
+    best_trial = study.best_trial
+    train_losses = best_trial.user_attrs["train_losses"]
+    val_losses = best_trial.user_attrs["validation_losses"]
+    best_epoch = best_trial.user_attrs["best_epoch"]
+    test_loss = best_trial.user_attrs["test_loss"]
+    test_mae = best_trial.user_attrs["test_mae"]
+    test_rmse = best_trial.user_attrs["test_rmse"]
+    return train_losses, val_losses, best_epoch, test_loss, test_mae, test_rmse
+
 def get_best_model_results(study):
     best_trial = study.best_trial
     fold_val_losses = best_trial.user_attrs["fold_val_losses"]
@@ -178,6 +241,26 @@ def plot_best_model_results(study_df, save_path=None):
     if save_path:
         plt.savefig(save_path)
     plt.show()
+
+def plot_best_model_results_traindevtest(study_df, save_path=None):
+
+    train_losses = study_df["user_attrs_train_losses"].iloc[study_df["value"].idxmin()]
+    val_losses = study_df["user_attrs_validation_losses"].iloc[study_df["value"].idxmin()]
+    
+    plt.figure(figsize=(10, 5))
+    epochs = range(1, len(train_losses) + 1)
+    plt.plot(epochs, train_losses, label='Training Loss', marker='o')
+    plt.plot(epochs, val_losses, label='Validation Loss', marker='o')
+    
+    plt.title('Training and Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    if save_path:
+        plt.savefig(save_path)
+    plt.show()
+
+
 
 
 def plot_preds_vs_truevalues(true_values, predictions, fold, save_path=None):

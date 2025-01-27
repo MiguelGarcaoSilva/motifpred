@@ -77,3 +77,42 @@ class RollingBasisTimeSeriesSplit:
             test_end = train_end + test_size
             yield np.arange(start, train_end), np.arange(train_end, test_end)
             start += self.step_size
+
+
+class TrainValTestSplit:
+    """
+    Split the data into training, validation, and test sets.
+    
+    Parameters:
+    - val_size (float): Proportion of the data to include in the validation set.
+    - test_size (float): Proportion of the data to include in the test set.
+    """
+    def __init__(self, val_size=0.1, test_size=0.1):
+        self.val_size = val_size
+        self.test_size = test_size
+
+
+    def split(self, X, y=None, groups=None):
+        """
+        Generate indices to split data into training, validation, and test sets.
+        
+        Parameters:
+        - X (array-like): Feature data to split.
+        - y (array-like, optional): Target data.
+        - groups (array-like, optional): Group labels.
+        
+        Returns:
+        - train_indices (array): Indices for the training set.
+        - val_indices (array): Indices for the validation set.
+        - test_indices (array): Indices for the test set.
+        """
+        n_samples = len(X)
+        val_size = int(self.val_size * n_samples)
+        test_size = int(self.test_size * n_samples)
+        train_size = n_samples - val_size - test_size
+
+        train_indices = np.arange(train_size)
+        val_indices = np.arange(train_size, train_size + val_size)
+        test_indices = np.arange(train_size + val_size, n_samples)
+
+        return train_indices, val_indices, test_indices
