@@ -6,7 +6,7 @@ from pathlib import Path
 BASE_DIR = Path('../../').resolve()
 CASE_STUDY = 'household'
 DATASET = 'data'
-VARIABLES = ["Global_active_power","Global_reactive_power","Voltage","Global_intensity"]
+VARIABLES = ["Global_active_power","Global_intensity"]
 
 STUMPY_EXCL_ZONE_DENOM = 2  # r = np.ceil(m/2)
 TOP_K_MP = 1
@@ -14,7 +14,8 @@ INCLUDE = None
 NORMALIZE = True
 SUBSQUENCES_LENGTHS = [ 60, 60*3, 60*6]
 NORMALIZE_FLAGS = {"X_series": True, "X_mask": False, "X_indices": True}
-
+NTOP_MOTIFS = 5
+MOTIF_SIZE = 60*3
 
 # Derived directories
 RESULTS_DIR = BASE_DIR / 'results' / CASE_STUDY 

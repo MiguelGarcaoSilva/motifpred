@@ -5,54 +5,7 @@ from torch.nn.utils.rnn import pad_sequence
 import torch
 import plotly.graph_objects as go
 
-def create_dataset(data, lookback_period, step, forecast_period, motif_indexes):
-    X1, X2, y = [], [], []  # X1: data, X2: indexes of the motifs, y: distance to the next motif
-    
-    for idx in range(len(data[0]) - lookback_period - 1):
-        if idx % step != 0:
-            continue
-
-        window_end_idx = idx + lookback_period
-        forecast_period_end = window_end_idx + forecast_period
-
-        # If there are no more matches after the window, break
-        if not any(window_end_idx < motif_idx for motif_idx in motif_indexes):
-            break
-
-        # Motif indexes in window, relative to the start of the window
-        motif_indexes_in_window = [motif_idx - idx for motif_idx in motif_indexes if idx <= motif_idx <= window_end_idx]
-        motif_indexes_in_forecast_period = [motif_idx for motif_idx in motif_indexes if window_end_idx < motif_idx <= forecast_period_end]
-
-        if motif_indexes_in_forecast_period:
-            next_match_in_forecast_period = motif_indexes_in_forecast_period[0]
-        else:
-            next_match_in_forecast_period = -1  # No match in the forecast period but exists in the future
-
-        # Get the data window and transpose to (lookback_period, num_features)
-        data_window = data[:, idx:window_end_idx].T
-
-        # Calculate `y`
-        data_y = -1
-        if next_match_in_forecast_period != -1:
-            # Index of the next match relative to the end of the window
-            data_y = next_match_in_forecast_period - window_end_idx
-        
-        # Append to lists
-        X1.append(torch.tensor(data_window, dtype=torch.float32))  # Now with shape (lookback_period, num_features)
-        X2.append(torch.tensor(motif_indexes_in_window, dtype=torch.float32)) 
-        y.append(data_y) 
-
-    # Pad X2 sequences to have the same length
-    X2_padded = pad_sequence(X2, batch_first=True, padding_value=-1).unsqueeze(-1) # Final shape: (num_samples, max_num_motifs, 1)
-
-    # Convert lists to torch tensors
-    X1 = torch.stack(X1)  # Final shape: (num_samples, lookback_period, num_features)
-    y = torch.tensor(y, dtype=torch.float32).unsqueeze(1) 
-
-    return X1, X2_padded, y
-
-def create_motif_dataset(data, lookback_period, step, forecast_period, motif_indexes, motif_size):
-
+def create_dataset(data, lookback_period, step, forecast_period, motif_indexes, motif_size):
     X1, X2, mask, y = [], [], [], []  # X1: data, X2: indexes of the motifs, y: distance to the next motif
 
     for idx in range(len(data[0]) - lookback_period - 1):

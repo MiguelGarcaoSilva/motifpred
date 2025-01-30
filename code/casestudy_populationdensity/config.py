@@ -13,9 +13,10 @@ STUMPY_EXCL_ZONE_DENOM = 2  # r = np.ceil(m/2)
 TOP_K_MP = 1
 INCLUDE = None
 NORMALIZE = True
-SUBSQUENCES_LENGTHS = [4, 6]
+SUBSQUENCES_LENGTHS = [4, 6, 12]
 NORMALIZE_FLAGS = {"X_series": True, "X_mask": False, "X_indices": True}
-
+NTOP_MOTIFS = 5
+MOTIF_SIZE = 12
 
 # Derived directories
 RESULTS_DIR = BASE_DIR / 'results' / CASE_STUDY 

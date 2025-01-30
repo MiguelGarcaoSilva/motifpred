@@ -28,11 +28,10 @@ class BaselineAverage(nn.Module):
         for batch in indexes:  # Iterate over batches
             valid_values = batch[batch != -1]  # Remove padding (-1 values)
             if len(valid_values) <= 1:  # Not enough values to compute differences
-                batch_predictions.append(torch.tensor(0.0, device=device))
+                batch_predictions.append(torch.tensor(1, device=device))
             else:
                 differences = valid_values[1:] - valid_values[:-1]  # Consecutive differences
                 avg_difference = torch.mean(differences)  # Average interval
-
                 last_index = valid_values[-1]
                 next_prediction = last_index + avg_difference
                 time_to_next_repetition = next_prediction - self.n_timepoints
@@ -76,11 +75,10 @@ class BaselineLastDifference(nn.Module):
         for batch in indexes:  # Iterate over batches
             valid_values = batch[batch != -1]  # Remove padding (-1 values)
             if len(valid_values) <= 1:
-                batch_predictions.append(torch.tensor(0.0, device=indexes.device))
+                batch_predictions.append(torch.tensor(1, device=indexes.device))
             else:
                 # Use the last difference as the interval
                 last_difference = valid_values[-1] - valid_values[-2]
-
                 last_index = valid_values[-1]  # Last index in the sequence
                 next_prediction = last_index + last_difference  # Next index prediction
                 # Ensure the next prediction is after the end of the window

@@ -98,7 +98,7 @@ def run_optuna_study(objective_func, model_class, model_type, suggestion_dict, m
         return trial_val_loss
 
     # Let Optuna manage trials and pass them to the objective function
-    study.optimize(objective, n_trials=n_trials)
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
     joblib.dump(study, file_name)
 
     # Save and log the study results
@@ -122,7 +122,7 @@ def get_preds_best_config_train_val_test(study, pipeline, model_class, model_typ
     X_series, X_mask, X_indices = X.get('X_series'), X.get('X_mask'), X.get('X_indices')
     
     # Initialize the splitter
-    splitter = TrainValTestSplit(val_size=0.1, test_size=0.1)
+    splitter = TrainValTestSplit(val_size=0.15, test_size=0.15)
 
     # Split data into train, val, and test sets
     if X_series is not None:
@@ -223,12 +223,6 @@ def get_preds_best_config_train_val_test(study, pipeline, model_class, model_typ
     test_rmse = rmse
     all_predictions = test_predictions.cpu().numpy()
     all_true_values = test_true_values.cpu().numpy()
-
-    # Output validation and test losses
-    print("Validation Loss:", val_loss)
-    print("Test Loss:", test_loss)
-    print("Test MAE:", test_mae)
-    print("Test RMSE:", test_rmse)
     
     return epochs_train_losses, epochs_val_losses, val_losses, test_losses, test_mae, test_rmse, all_predictions, all_true_values
 
@@ -730,7 +724,7 @@ class ModelTrainingPipeline:
         # Get X from X dictionary, if it doesn't exist, set to None
         X_series, X_mask, X_indices = X.get('X_series'), X.get('X_mask'), X.get('X_indices')
         
-        splitter = TrainValTestSplit(val_size=0.1, test_size=0.1)
+        splitter = TrainValTestSplit(val_size=0.15, test_size=0.15)
 
         # Split data into train, val, and test sets
         if X_series is not None:
