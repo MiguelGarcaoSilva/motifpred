@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-class TimeSeriesTransformer(nn.Module):
+class Transformer(nn.Module):
     """
     Transformer model for time series forecasting.
     args:
@@ -26,7 +26,7 @@ class TimeSeriesTransformer(nn.Module):
         dropout,
         output_dim = 1
     ):
-        super(TimeSeriesTransformer, self).__init__()
+        super(Transformer, self).__init__()
 
         self.input_dim = input_dim
         self.d_model = d_model

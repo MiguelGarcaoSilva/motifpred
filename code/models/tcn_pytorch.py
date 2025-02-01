@@ -95,9 +95,9 @@ class TemporalBlock(nn.Module):
         return self.relu(out + res)
 
 
-class TemporalConvNet(nn.Module):
+class TCN(nn.Module):
     def __init__(self, input_channels, num_channels_list, kernel_size, dropout, output_dim = 1):
-        super(TemporalConvNet, self).__init__()
+        super(TCN, self).__init__()
         layers = []
         num_levels = len(num_channels_list)
         for i in range(num_levels):
