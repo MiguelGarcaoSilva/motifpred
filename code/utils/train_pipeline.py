@@ -505,6 +505,7 @@ class ModelTrainingPipeline:
 
         # Start timer for early stopping
         if self.early_stopper:
+            self.early_stopper.reset()
             self.early_stopper.start_timer()
 
         for epoch in range(num_epochs):
