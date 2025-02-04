@@ -38,7 +38,7 @@ mp_stats_table = pd.read_csv(
     RESULTS_DIR / f"mp_stats_table_normalized_{NORMALIZE}_top_{TOP_K_MP}.csv"
 )
 mp_stats_table = mp_stats_table[mp_stats_table["m"] == MOTIF_SIZE]
-top_motifs = mp_stats_table.sort_values(by="#Matches", ascending=False).head(NTOP_MOTIFS)
+top_motifs = mp_stats_table.sort_values(by=["#Matches", "ID"], ascending=[False, True]).head(NTOP_MOTIFS)
 top_motifs = top_motifs[["m", "Indices"]]
 
 
