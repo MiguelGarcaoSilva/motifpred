@@ -107,7 +107,7 @@ for i, top_motif in top_motifs.iterrows():
         },
         "batch_size": {
             "type": "categorical",
-            "args": [[4, 8, 16, 32]]
+            "args": [[16, 32, 64, 128]]
         }
     }
 
@@ -208,7 +208,7 @@ for i, top_motif in top_motifs.iterrows():
         },
         "batch_size": {
             "type": "categorical",
-            "args": [[4, 8, 16, 32]]
+            "args": [[16, 32, 64, 128]]
         }
     }
 
@@ -309,7 +309,7 @@ for i, top_motif in top_motifs.iterrows():
         },
         "batch_size": {
             "type": "categorical",
-            "args": [[4, 8, 16, 32]]
+            "args": [[16, 32, 64, 128]]
         }
     }
 
