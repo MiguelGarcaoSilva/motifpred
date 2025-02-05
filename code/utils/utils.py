@@ -5,6 +5,18 @@ from torch.nn.utils.rnn import pad_sequence
 import torch
 import plotly.graph_objects as go
 
+# Set global style for scientific plots
+plt.rcParams.update({
+    "font.family": "serif",  # Use a serif font for better readability in papers
+    "font.size": 14,         # Increase font size for clarity
+    "axes.titlesize": 16,    # Larger title font size
+    "axes.labelsize": 14,    # Axis label size
+    "xtick.labelsize": 12,   # Tick size for x-axis
+    "ytick.labelsize": 12,   # Tick size for y-axis
+    "legend.fontsize": 12,   # Legend font size
+    "figure.figsize": (6, 4) # Standard paper figure size
+})
+
 def create_dataset(data, lookback_period, step, forecast_period, motif_indexes, motif_size):
     X1, X2, mask, y = [], [], [], []  # X1: data, X2: indexes of the motifs, y: distance to the next motif
 
@@ -214,17 +226,27 @@ def plot_best_model_results_traindevtest(study_df, save_path=None):
     plt.show()
 
 
-
-
 def plot_preds_vs_truevalues(true_values, predictions, fold, save_path=None):
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(y=true_values, mode='markers', name='True Values'))
-    fig.add_trace(go.Scatter(y=predictions, mode='markers', name='Predictions'))
-    fig.update_layout(
-        title=f"Fold {fold} - True Values vs Predictions",
-        xaxis_title="Sample",
-        yaxis_title="Value"
-    )
+    plt.figure(figsize=(6, 4), dpi=300)  # High-quality figure for scientific papers
+
+    # Scatter plot
+    plt.scatter(true_values, predictions, alpha=0.6, edgecolors='black', label='Predictions', s=20)
+
+    # 1:1 reference line (ideal prediction)
+    min_val = min(min(true_values), min(predictions))
+    max_val = max(max(true_values), max(predictions))
+    plt.plot([min_val, max_val], [min_val, max_val], 'r--', label="$y = x$ (Ideal Fit)")
+
+    # Labels and title
+    plt.xlabel("True Values", fontsize=14)
+    plt.ylabel("Predicted Values", fontsize=14)
+
+    # Grid and legend
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend(fontsize=12)
+
+    # Save or display
     if save_path:
-        fig.write_image(save_path)
-    fig.show()
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)  # High DPI for print
+    plt.show()
+

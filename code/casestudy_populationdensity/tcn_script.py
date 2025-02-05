@@ -69,7 +69,7 @@ test_tensor()
 from utils.utils import create_dataset
 from utils.train_pipeline import run_optuna_study
 from utils.utils import get_best_model_results_traindevtest, plot_best_model_results_traindevtest
-from models.ffnn_pytorch import FFNN
+from models.tcn_pytorch import TCN
 from utils.utils import plot_preds_vs_truevalues
 from utils.train_pipeline import get_preds_best_config_train_val_test
 
@@ -85,7 +85,7 @@ for i, top_motif in top_motifs.iterrows():
 
     motif_indexes = sorted(ast.literal_eval(top_motif["Indices"]))
     
-    print(f"Evaluating motif {i+1} with size {MOTIF_SIZE} and {len(motif_indexes)} indexes")
+    print(f"Evaluating motif {i+1} with size {MOTIF_SIZE} and {len(motif_indexes)}  indexes")
     
     # Create dataset for the current motif
     X_series, X_indices, X_mask, y = create_dataset(data, lookback_period, step, forecast_period, motif_indexes, MOTIF_SIZE)
@@ -99,26 +99,35 @@ for i, top_motif in top_motifs.iterrows():
     # Define the model and run the Optuna study
     n_trials = 100
     num_epochs = 500
-    model_type = "FFNN"
-    model_name = "FFNNSeries"
+    model_type = "TCN"
+    model_name = "TCNSeries"
 
     suggestion_dict = {
         "learning_rate": {
             "type": "float",
-            "args": [1e-5, 1e-3], 
-            "kwargs": {"log": True} 
+            "args": [1e-5, 1e-3],
+            "kwargs": {"log": True}
         },
-        "num_layers": {
+        "kernel_size": { # ensure receptive field is at least as large as sequence length (lookback_period)
             "type": "categorical",
-            "args": [[1, 2, 3, 4]] 
-        },        
+            "args": [[3, 5 ,7]]
+        },
+        "receptive_field": {
+            "type": "categorical",
+            "args": [[250]]
+        },
+        "dropout": {
+            "type": "float",
+            "args": [0.0, 0.5]
+        },
         "batch_size": {
             "type": "categorical",
             "args": [[4, 8, 16, 32]]
         }
     }
 
-    model_params_keys = ["hidden_sizes_list"]
+
+    model_params_keys = ["kernel_size", "num_channels_list", "dropout"]
     model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_motif_{i+1}")
     os.makedirs(model_results_dir, exist_ok=True)  
 
@@ -135,7 +144,7 @@ for i, top_motif in top_motifs.iterrows():
     test_mae_list.append(test_mae)
     test_rmse_list.append(test_rmse)
     
-    epochs_train_losses, epochs_val_losses, val_losses, test_losses, test_mae, test_rmse, all_predictions, all_true_values = get_preds_best_config_train_val_test(study, pipeline, eval(model_type), model_type, model_params_keys, num_epochs=num_epochs, seed=seed, X=X, y=y, normalize_flags=NORMALIZE_FLAGS)
+    #epochs_train_losses, epochs_val_losses, val_losses, test_losses, test_mae, test_rmse, all_predictions, all_true_values = get_preds_best_config_train_val_test(study, pipeline, eval(model_type), model_type, model_params_keys, num_epochs=num_epochs, seed=seed, X=X, y=y, normalize_flags=NORMALIZE_FLAGS)
     #plot_best_model_results_traindevtest( study.trials_dataframe(),
     #    save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_motif_{i+1}_best_results.png")
     #)    
@@ -168,7 +177,7 @@ print(f"Mean Test RMSE: {mean_test_rmse} ± {std_test_rmse}")
 from utils.utils import create_dataset
 from utils.train_pipeline import run_optuna_study
 from utils.utils import get_best_model_results_traindevtest, plot_best_model_results_traindevtest
-from models.ffnn_pytorch import FFNN
+from models.tcn_pytorch import TCN
 from utils.utils import plot_preds_vs_truevalues
 from utils.train_pipeline import get_preds_best_config_train_val_test
 
@@ -184,7 +193,7 @@ for i, top_motif in top_motifs.iterrows():
 
     motif_indexes = sorted(ast.literal_eval(top_motif["Indices"]))
     
-    print(f"Evaluating motif {i+1} with size {MOTIF_SIZE} and {len(motif_indexes)} indexes")
+    print(f"Evaluating motif {i+1} with size {MOTIF_SIZE} and {len(motif_indexes)}  indexes")
     
     # Create dataset for the current motif
     X_series, X_indices, X_mask, y = create_dataset(data, lookback_period, step, forecast_period, motif_indexes, MOTIF_SIZE)
@@ -198,31 +207,39 @@ for i, top_motif in top_motifs.iterrows():
     # Define the model and run the Optuna study
     n_trials = 100
     num_epochs = 500
-    model_type = "FFNN"
-    model_name = "FFNNSeries_Masking"
+    model_type = "TCN"
+    model_name = "TCNSeries_Masking"
 
     suggestion_dict = {
         "learning_rate": {
             "type": "float",
-            "args": [1e-5, 1e-3], 
-            "kwargs": {"log": True} 
+            "args": [1e-5, 1e-3],
+            "kwargs": {"log": True}
         },
-        "num_layers": {
+        "kernel_size": { # ensure receptive field is at least as large as sequence length (lookback_period)
             "type": "categorical",
-            "args": [[1, 2, 3, 4]] 
-        },        
+            "args": [[3, 5 ,7]]
+        },
+        "receptive_field": {
+            "type": "categorical",
+            "args": [[250]]
+        },
+        "dropout": {
+            "type": "float",
+            "args": [0.0, 0.5]
+        },
         "batch_size": {
             "type": "categorical",
             "args": [[4, 8, 16, 32]]
         }
     }
 
-    model_params_keys = ["hidden_sizes_list"]
+    model_params_keys = ["kernel_size", "num_channels_list", "dropout"]
     model_results_dir = os.path.join(RESULTS_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_motif_{i+1}")
     os.makedirs(model_results_dir, exist_ok=True)  
 
     X = {"X_series": X_series, "X_mask": X_mask}
-    run_optuna_study(pipeline.run_train_val_test, eval(model_type), model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+    run_optuna_study(pipeline.run_train_val_test, eval(model_type), model_type,suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
     study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
     train_losses, val_losses, best_epoch, test_loss, test_mae, test_rmse = get_best_model_results_traindevtest(study)
@@ -234,7 +251,7 @@ for i, top_motif in top_motifs.iterrows():
     test_mae_list.append(test_mae)
     test_rmse_list.append(test_rmse)
     
-    epochs_train_losses, epochs_val_losses, val_losses, test_losses, test_mae, test_rmse, all_predictions, all_true_values = get_preds_best_config_train_val_test(study, pipeline, eval(model_type), model_type, model_params_keys, num_epochs=num_epochs, seed=seed, X=X, y=y, normalize_flags=NORMALIZE_FLAGS)
+    #epochs_train_losses, epochs_val_losses, val_losses, test_losses, test_mae, test_rmse, all_predictions, all_true_values = get_preds_best_config_train_val_test(study, pipeline, eval(model_type), model_type, model_params_keys, num_epochs=num_epochs, seed=seed, X=X, y=y, normalize_flags=NORMALIZE_FLAGS)
     #plot_best_model_results_traindevtest( study.trials_dataframe(),
     #    save_path=os.path.join(IMAGES_DIR, f"{model_name}_{n_trials}_trials_{num_epochs}_epochs_motif_{i+1}_best_results.png")
     #)    
