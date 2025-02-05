@@ -13,10 +13,14 @@ STUMPY_EXCL_ZONE_DENOM = 2  # r = np.ceil(m/2)
 TOP_K_MP = 1
 INCLUDE = None
 NORMALIZE = True
-SUBSQUENCES_LENGTHS = [4, 6, 12]
+SUBSQUENCES_LENGTHS = [12]
 NORMALIZE_FLAGS = {"X_series": True, "X_mask": False, "X_indices": True}
 NTOP_MOTIFS = 5
 MOTIF_SIZE = 12
+
+LOOKBACK_PERIOD = 24*7*3 #window size 24*7*3 = 3 weeks
+STEP = 1 #step size for the sliding window
+FORECAST_PERIOD = 24*2 #forward window size 24*2 = 2 days
 
 # Derived directories
 RESULTS_DIR = BASE_DIR / 'results' / CASE_STUDY 

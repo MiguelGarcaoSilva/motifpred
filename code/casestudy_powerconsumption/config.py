@@ -5,17 +5,22 @@ from pathlib import Path
 # Base paths and configuration
 BASE_DIR = Path('../../').resolve()
 CASE_STUDY = 'household'
-DATASET = 'data'
+DATASET = 'data_5minresampled'
 VARIABLES = ["Global_active_power","Global_intensity"]
 
 STUMPY_EXCL_ZONE_DENOM = 2  # r = np.ceil(m/2)
 TOP_K_MP = 1
 INCLUDE = None
 NORMALIZE = True
-SUBSQUENCES_LENGTHS = [ 60, 60*3, 60*6]
+SUBSQUENCES_LENGTHS = [24] # 24*5min = 2 hours
 NORMALIZE_FLAGS = {"X_series": True, "X_mask": False, "X_indices": True}
 NTOP_MOTIFS = 5
-MOTIF_SIZE = 60*3
+MOTIF_SIZE = 24
+
+
+LOOKBACK_PERIOD = 12*24*2 #window size  12*24*2 = 2 days
+STEP = 5 #step size for the sliding window
+FORECAST_PERIOD = 12*24*1 #forward window size 12*24*1 = 1 day
 
 # Derived directories
 RESULTS_DIR = BASE_DIR / 'results' / CASE_STUDY 
