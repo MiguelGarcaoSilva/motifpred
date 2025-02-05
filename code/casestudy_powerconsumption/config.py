@@ -5,8 +5,8 @@ from pathlib import Path
 # Base paths and configuration
 BASE_DIR = Path('../../').resolve()
 CASE_STUDY = 'household'
-DATASET = 'data_5minresampled'
-VARIABLES = ["Global_active_power","Global_intensity"]
+DATASET = 'data_5min_resampled_globalactive_reactive'
+VARIABLES = ["Global_active_power","Global_reactive_power"]
 
 STUMPY_EXCL_ZONE_DENOM = 2  # r = np.ceil(m/2)
 TOP_K_MP = 1
