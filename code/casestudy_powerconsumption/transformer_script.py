@@ -196,7 +196,7 @@ for i, top_motif in top_motifs.iterrows():
     os.makedirs(model_results_dir, exist_ok=True)  
 
     X = {"X_series": X_series}
-    run_optuna_study(pipeline.run_train_val_test, eval(model_type), model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
+    #run_optuna_study(pipeline.run_train_val_test, eval(model_type), model_type, suggestion_dict, model_params_keys, seed, X, y, NORMALIZE_FLAGS, model_results_dir, n_trials=n_trials, num_epochs=num_epochs)
 
     study = joblib.load(os.path.join(model_results_dir, "study.pkl"))
     train_losses, val_losses, best_epoch, test_loss, test_mae, test_rmse = get_best_model_results_traindevtest(study)

@@ -1,0 +1,26 @@
+base_dir: "../../"
+case_study: "household"
+dataset: "data_5min_resampled_globalactive_reactive"
+variables: ["Global_active_power", "Global_reactive_power"]
+
+stumpy_excl_zone_denom: 2
+top_k_mp: 1
+include: null
+normalize: true
+subsequences_lengths: [24]  # 24*5min = 2 hours
+normalize_flags:
+  X_series: true
+  X_mask: false
+  X_indices: true
+ntop_motifs: 5
+motif_size: 24
+
+lookback_period: 576  # 12*24*2 = 2 days
+step: 5  # Step size for sliding window
+forecast_period: 288  # 12*24*1 = 1 day
+
+results_dir: "results/household"
+results_motif_dir: "results/household/mp/data_5min_resampled_globalactive_reactive"
+images_dir: "images/household"
+data_dir: "data/household"
+dataset_path: "data/household/data_5min_resampled_globalactive_reactive.csv"

@@ -1,0 +1,25 @@
+base_dir: "../../"
+case_study: "syntheticdata1"
+variables: [0, 2]
+
+lookback_period: 100
+step: 5
+forecast_period: 50 
+
+# Derived directories
+results_dir: "results/syntheticdata1/variables=[0,2]"
+images_dir: "images/syntheticdata1/variables=[0,2]"
+data_dir: "data/syntheticdata1/variables=[0,2]"
+
+# Dataset file paths
+n: 100000  # Number of data points
+k: 3       # Number of variables
+p: 5       # Pattern length
+variables_pattern: [0, 2]
+normalize_flags:
+  X_series: true
+  X_mask: false
+  X_indices: true
+
+dataset_path: "data/syntheticdata1/variables=[0,2]/scenario1_n=100000_k=3_p=5_min_step=5_max_step=45_variables=[0,2].csv"
+motif_indexes_path: "data/syntheticdata1/variables=[0,2]/motif_indexes_scenario1_n=100000_k=3_p=5_min_step=5_max_step=45.csv"

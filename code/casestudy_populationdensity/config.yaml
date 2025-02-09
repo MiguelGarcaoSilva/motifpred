@@ -1,0 +1,27 @@
+base_dir: "../../"
+case_study: "populationdensity"
+dataset: "hourly_township"
+township_name: "Avenidas Novas"
+variables: ["sum_terminals"]
+
+stumpy_excl_zone_denom: 2
+top_k_mp: 1
+include: null
+normalize: true
+subsequences_lengths: [12]
+normalize_flags:
+  X_series: true
+  X_mask: false
+  X_indices: true
+ntop_motifs: 5
+motif_size: 12
+
+lookback_period: 504  # 24*7*3
+step: 1
+forecast_period: 48  # 24*2
+
+results_dir: "results/populationdensity"
+results_motif_dir: "results/populationdensity/mp/hourly_township"
+images_dir: "images/populationdensity"
+data_dir: "data/populationdensity"
+dataset_path: "data/populationdensity/hourly_township.csv"
