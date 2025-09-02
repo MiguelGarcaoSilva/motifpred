@@ -1,0 +1,26 @@
+base_dir: "../../"
+case_study: "refit"
+dataset: "data_1maveraged_3weeks"
+variables: ["Appliance1","Appliance2", "Appliance3", "Appliance4","Appliance5", "Appliance6", "Appliance7","Appliance8", "Appliance9"]
+
+stumpy_excl_zone_denom: 2
+top_k_mp: 1
+include: null
+normalize: true
+subsequences_lengths: [60]  # 60 * 1 = 1 hours
+normalize_flags:
+  X_series: true
+  X_mask: false
+  X_indices: true
+ntop_motifs: 5
+motif_size: 60
+
+lookback_period: 4320  # 3 days 
+step: 5  # Step size for sliding window
+forecast_period: 1440  # 1 day
+
+results_dir: "results/refit"
+results_motif_dir: "results/refit/mp/data_1maveraged_3weeks"
+images_dir: "images/refit"
+data_dir: "data/refit"
+dataset_path: "data/refit/data_1maveraged_3weeks.csv"
