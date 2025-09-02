@@ -1,5 +1,5 @@
 
-# motifpred
+# The Next Motif
 
 The Next Motif : Tapping into Recurrence Dynamics and Precursor Signals to Forecast Events of Interest
 
